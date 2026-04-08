@@ -93,9 +93,9 @@ async def health_check():
             db_status = "error"
         finally:
             db.close()
-        
+
         redis_status = "ok" if redis else "error"
-        
+
         if db_status == "ok" and redis_status == "ok":
             return {"status": "healthy", "service": "auth-service", "database": db_status, "redis": redis_status}
         else:

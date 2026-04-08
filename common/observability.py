@@ -4,7 +4,7 @@ Observability: OpenTelemetry tracing + Prometheus metrics.
 - Metrics: Prometheus /metrics endpoint (prometheus_client).
 """
 import os
-from prometheus_client import Counter, Histogram, generate_latest, REGISTRY, CollectorRegistry
+from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
 
 # Default registry with optional service label
 _metrics_registry: CollectorRegistry | None = None
@@ -60,7 +60,8 @@ def init_tracing(service_name: str) -> None:
 
         resource = Resource.create({SERVICE_NAME: service_name})
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+        provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
         trace.set_tracer_provider(provider)
     except Exception:
         pass  # optional: tracing off if deps missing or collector unreachable
@@ -91,8 +92,10 @@ def instrument_fastapi(app, service_name: str) -> None:
             c, h = get_request_counter(), get_request_latency()
             if c and h:
                 endpoint = request.url.path or "/"
-                c.labels(method=request.method, endpoint=endpoint, status=response.status_code).inc()
-                h.labels(method=request.method, endpoint=endpoint).observe(duration)
+                c.labels(method=request.method, endpoint=endpoint,
+                         status=response.status_code).inc()
+                h.labels(method=request.method,
+                         endpoint=endpoint).observe(duration)
             return response
 
     app.add_middleware(PrometheusMiddleware)

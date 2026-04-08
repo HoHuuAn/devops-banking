@@ -19,6 +19,7 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 redis: Redis | None = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis
@@ -37,6 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def get_db():
     db = SessionLocal()
     try:
@@ -44,9 +46,11 @@ def get_db():
     finally:
         db.close()
 
+
 class TransferReq(BaseModel):
     to_username: str
     amount: int
+
 
 @app.post("/transfer")
 async def transfer(body: TransferReq, x_session: str | None = Header(default=None), db: Session = Depends(get_db)):
@@ -95,6 +99,7 @@ async def transfer(body: TransferReq, x_session: str | None = Header(default=Non
 
     return {"ok": True, "from": sender.username, "to": receiver.username, "amount": body.amount}
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -109,13 +114,14 @@ async def health_check():
             db_status = "error"
         finally:
             db.close()
-        
+
         redis_status = "ok" if redis else "error"
-        
+
         if db_status == "ok" and redis_status == "ok":
             return {"status": "healthy", "service": "transfer-service", "database": db_status, "redis": redis_status}
         else:
-            raise HTTPException(503, detail={"status": "unhealthy", "database": db_status, "redis": redis_status})
+            raise HTTPException(503, detail={
+                                "status": "unhealthy", "database": db_status, "redis": redis_status})
     except HTTPException:
         raise
     except Exception as e:
