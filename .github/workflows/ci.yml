@@ -308,6 +308,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Verify Docker login
+        if: steps.should-push.outputs.push == 'true'
+        run: |
+          if [ -z "${{ secrets.DOCKER_USERNAME }}" ] || [ -z "${{ secrets.DOCKER_TOKEN }}" ]; then
+            echo "ERROR: Docker credentials not configured"
+            echo "Please add DOCKER_USERNAME and DOCKER_TOKEN to GitHub repository secrets"
+            exit 1
+          fi
+          echo "✅ Docker credentials configured"
+
       - name: Extract metadata (tags)
         if: steps.should-push.outputs.push == 'true'
         id: meta
@@ -323,16 +333,27 @@ jobs:
         if: steps.should-push.outputs.push == 'true'
         run: |
           IMAGE="${{ env.IMAGE_REPO }}/${{ matrix.service }}"
-          echo "Looking for: $IMAGE"
+          echo "Looking for loaded image: $IMAGE"
           docker images | grep "$IMAGE" || echo "No image found for $IMAGE"
           LOADED=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^$IMAGE:" | head -1)
           echo "Loaded: $LOADED"
-          if [ -z "$LOADED" ]; then echo "ERROR: No image found"; exit 1; fi
+          if [ -z "$LOADED" ]; then
+            echo "ERROR: No image found to push"
+            exit 1
+          fi
+          echo "Tagging and pushing to Docker Hub..."
           for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+            echo "  → Tagging: $tag"
             docker tag "$LOADED" "$tag"
-            docker push "$tag"
-            echo "Pushed: $tag"
+            echo "  → Pushing: $tag"
+            if docker push "$tag"; then
+              echo " Pushed: $tag"
+            else
+              echo " Failed to push: $tag"
+              exit 1
+            fi
           done
+          echo "All images pushed successfully!"
 
   # ============================================================
   # Stage 6: Security scan with Trivy (only on main)
