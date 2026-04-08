@@ -166,10 +166,10 @@ jobs:
 
       - name: Smoke test — import all modules
         run: |
-          cd services/auth-service && python -c "import sys; sys.path.insert(0, '../common'); print('auth-service OK')"
-          cd services/account-service && python -c "import sys; sys.path.insert(0, '../common'); print('account-service OK')"
-          cd services/transfer-service && python -c "import sys; sys.path.insert(0, '../common'); print('transfer-service OK')"
-          cd services/notification-service && python -c "import sys; sys.path.insert(0, '../common'); print('notification-service OK')"
+          (cd services/auth-service && python -c "import sys; sys.path.insert(0, '../common'); print('auth-service OK')")
+          (cd services/account-service && python -c "import sys; sys.path.insert(0, '../common'); print('account-service OK')")
+          (cd services/transfer-service && python -c "import sys; sys.path.insert(0, '../common'); print('transfer-service OK')")
+          (cd services/notification-service && python -c "import sys; sys.path.insert(0, '../common'); print('notification-service OK')")
 
   # ============================================================
   # Stage 4: Build Docker images → save as artifacts
