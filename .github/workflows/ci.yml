@@ -53,11 +53,11 @@ jobs:
       services-list: ${{ steps.services.outputs.list }}
       any-change: ${{ steps.services.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.0
 
       - name: Detect file changes
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v3.0.2
         with:
           filters: |
             auth-service:
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect-changes
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.0
 
       - uses: actions/setup-python@v5
         with:
@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.0
 
       - uses: actions/setup-python@v5
         with:
@@ -215,7 +215,7 @@ jobs:
             echo "build=false" >> $GITHUB_OUTPUT
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.0
         if: steps.should-build.outputs.build == 'true'
 
       - name: Set up Docker Buildx
@@ -243,14 +243,14 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/${{ matrix.service.name }}.tar
+          outputs: type=docker,dest=/tmp/image-${{ matrix.service.name }}.tar
 
       - name: Upload image artifact
         if: steps.should-build.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: image-${{ matrix.service.name }}
-          path: /tmp/${{ matrix.service.name }}.tar
+          path: /tmp/image-${{ matrix.service.name }}.tar
           retention-days: 1
 
   # ============================================================
