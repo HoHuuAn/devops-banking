@@ -233,17 +233,32 @@ jobs:
             type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build image
+      - name: Build image tar
         if: steps.should-build.outputs.build == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.dockerfile }}
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          outputs: type=docker,dest=/tmp/image-${{ matrix.service.name }}.tar
+        run: |
+          echo "Building image tar for ${{ matrix.service.name }}"
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              TAG_ARGS="$TAG_ARGS -t $tag"
+            fi
+          done << 'EOF'
+          ${{ steps.meta.outputs.tags }}
+          EOF
+
+          docker buildx build \
+            $TAG_ARGS \
+            -f "${{ matrix.service.dockerfile }}" \
+            "${{ matrix.service.context }}" \
+            --output type=docker,dest=/tmp/image-${{ matrix.service.name }}.tar \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max
+
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Build failed for ${{ matrix.service.name }}"
+            exit 1
+          fi
+          echo "Build completed for ${{ matrix.service.name }}"
 
       - name: Upload image artifact
         if: steps.should-build.outputs.build == 'true'
@@ -254,7 +269,7 @@ jobs:
           retention-days: 1
 
   # ============================================================
-  # Stage 5: Push images to Docker Hub (only on main)
+  # Stage 5: Push images to Docker Hub
   # ============================================================
   push-images:
     name: Push ${{ matrix.service }}
@@ -262,7 +277,7 @@ jobs:
     needs: [detect-changes, build-images]
     if: |
       always() &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+      (github.ref == 'refs/heads/main')
     strategy:
       fail-fast: false
       matrix:
@@ -343,17 +358,11 @@ jobs:
           fi
           echo "Tagging and pushing to Docker Hub..."
           for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
-            echo "  → Tagging: $tag"
             docker tag "$LOADED" "$tag"
-            echo "  → Pushing: $tag"
-            if docker push "$tag"; then
-              echo " Pushed: $tag"
-            else
-              echo " Failed to push: $tag"
-              exit 1
-            fi
+            docker push "$tag"
+            echo "Pushed: $tag"
           done
-          echo "All images pushed successfully!"
+          echo "Push completed for ${{ matrix.service }}"
 
   # ============================================================
   # Stage 6: Security scan with Trivy (only on main)
@@ -364,7 +373,7 @@ jobs:
     needs: [detect-changes, push-images]
     if: |
       always() &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+      (github.ref == 'refs/heads/main')
     strategy:
       fail-fast: false
       matrix:
@@ -375,7 +384,7 @@ jobs:
           - notification-service
           - frontend
     steps:
-      - name: Check if service was pushed
+      - name: Check if service was built
         id: should-scan
         run: |
           LIST="${{ needs.detect-changes.outputs.services-list }}"
@@ -397,6 +406,7 @@ jobs:
         if: steps.should-scan.outputs.scan == 'true'
         uses: aquasecurity/trivy-action@master
         with:
+          cache: false
           image-ref: ${{ env.IMAGE_REPO }}-${{ matrix.service }}:latest
           format: table
           exit-code: 0
