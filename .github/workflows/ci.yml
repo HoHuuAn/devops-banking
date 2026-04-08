@@ -8,6 +8,11 @@ name: CI
 # Registry: Docker Hub (hohuuan2003/devops-banking)
 # ============================================================
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: docker.io
+  IMAGE_REPO: ${{ vars.DOCKER_REPO || 'hohuuan2003/devops-banking' }}
+
 on:
   push:
     branches: [main, dev]
@@ -36,9 +41,6 @@ on:
           - notification-service
           - frontend
 
-env:
-  REGISTRY: docker.io
-  IMAGE_REPO: ${{ vars.DOCKER_REPO || 'hohuuan2003/devops-banking' }}
 
 jobs:
   # ============================================================
