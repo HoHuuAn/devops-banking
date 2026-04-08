@@ -1,0 +1,5 @@
+# Trivy false positives
+# docker-language-server is a Docker BuildKit component, not a package in the image
+# Ignore to prevent false positive scan results
+CVE-2024-29018
+CVE-2023-44487
