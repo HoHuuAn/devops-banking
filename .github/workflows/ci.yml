@@ -117,7 +117,6 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.any-change == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -150,7 +149,6 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
-    if: needs.detect-changes.outputs.any-change == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -180,7 +178,6 @@ jobs:
     name: Build ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: [detect-changes, test]
-    if: needs.detect-changes.outputs.any-change == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -262,7 +259,6 @@ jobs:
     needs: [detect-changes, build-images]
     if: |
       always() &&
-      needs.detect-changes.outputs.any-change == 'true' &&
       github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
@@ -339,7 +335,6 @@ jobs:
     needs: [detect-changes, push-images]
     if: |
       always() &&
-      needs.detect-changes.outputs.any-change == 'true' &&
       github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
