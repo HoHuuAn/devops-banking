@@ -1,0 +1,207 @@
+# ============================================================
+# devops-banking — .gitignore
+# Organized by category with section headers
+# ============================================================
+
+
+# ------------------------------------------------------------
+# SECTION 1: Language & Framework — Node.js
+# ------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+.pnp/
+.pnp.js
+
+frontend/node_modules/
+frontend/package-lock.json
+frontend/.pnp/
+frontend/.pnp.js
+
+k8s-chatbot/frontend/node_modules/
+k8s-chatbot/frontend/package-lock.json
+k8s-chatbot/frontend/.pnp/
+k8s-chatbot/frontend/.pnp.js
+
+
+# ------------------------------------------------------------
+# SECTION 2: Language & Framework — Python
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+.env
+
+# Byte-compiled
+*.pyc
+*.pyo
+
+
+# ------------------------------------------------------------
+# SECTION 3: Docker & Containers
+# ------------------------------------------------------------
+.docker/
+
+
+# ------------------------------------------------------------
+# SECTION 4: Cloud & Infrastructure State
+# ------------------------------------------------------------
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# Pulumi
+ Pulumi.save
+
+
+# ------------------------------------------------------------
+# SECTION 5: IDE & Editor
+# ------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+
+# ------------------------------------------------------------
+# SECTION 6: Secrets & Local Config
+# (Never commit .env or credentials)
+# ------------------------------------------------------------
+.env
+.env.local
+.env.development
+.env.production
+*.pem
+*.key
+*.crt
+*.csr
+credentials.json
+secrets.yaml
+secrets.yml
+secrets.toml
+
+
+# ------------------------------------------------------------
+# SECTION 7: [WEEK 4] CI/CD GitHub Actions artifacts
+# Build/test output from GitHub Actions runs
+# ------------------------------------------------------------
+.github/**/artifact/
+.github/workflows/devsecops-pr.yml
+.github/workflows/k8s-chatbot-ci.yml
+*.tgz
+
+
+# ------------------------------------------------------------
+# SECTION 8: [WEEK 6+] Phase Folders — NOT YET NEEDED
+# Each block = one learning phase. Uncomment when ready.
+#
+# Week 4 → Keep all phase folders ignored.
+# Week 6+ → Remove the line for the phase you're starting.
+# ------------------------------------------------------------
+
+# Phase 1 — Docker to Kubernetes Migration (Week 5)
+phase1-docker-to-k8s/
+
+# Phase 2 — Helm Charts + ArgoCD GitOps (Week 6+)
+phase2-helm-chart/
+
+# Phase 3 — Monitoring + KEDA Autoscaling (Week 7+)
+phase3-monitoring-keda/
+
+# Phase 4 — Application v2 (Week 8+)
+phase4-application-v2/
+
+# Phase 5 — Architecture Refactor — Cross-Namespace Split + Kong HA (Week 9+)
+phase5-architecture-refactor/
+
+# Phase 6 — Deployment Strategies — Blue/Green + Canary (Week 9+)
+phase6-deployment-strategies/
+
+# Phase 7 — Security + SRE (Week 10+)
+phase7-security-reliability/
+
+# Phase 8 — Message Queue Architecture — RabbitMQ (Week 10+)
+phase8-application-v3/
+
+
+# ------------------------------------------------------------
+# SECTION 9: [FUTURE] K8s Chatbot — Out of Training Scope
+# Set up later once core banking pipeline is mastered
+# ------------------------------------------------------------
+k8s-chatbot/
+
+# ------------------------------------------------------------
+# SECTION 9b: [WEEK 5+] Kubernetes Manifests — Later Phases
+# Raw K8s YAML will be replaced by Helm/ArgoCD (Phase 2+)
+# ------------------------------------------------------------
+k8s/
+
+
+# ------------------------------------------------------------
+# SECTION 10: [DOCS] Read-Only Reference Files — NOT for Repo
+# Troubleshooting guides, runbooks, registry docs, deploy guides
+# ------------------------------------------------------------
+FIX_BACKEND_ERROR.md
+FIX_KONG_404.md
+GITLAB_REGISTRY.md
+K8S_DEPLOY.md
+MICROSERVICES.md
+OBSERVABILITY.md
+README.md
+SETUP.md
+demo-banking.drawio
+
+# ------------------------------------------------------------
+# SECTION 11: [DOCS] Phase-level Markdown Instructions
+# Exclude phase guides that are for reading, not for repo
+# ------------------------------------------------------------
+# Phase subdirectory MDs — keep if you want them in repo
+# phase1-docker-to-k8s/*.md
+# phase2-helm-chart/**/*.md
+# phase3-monitoring-keda/**/*.md
+# phase4-application-v2/*.md
+# phase5-architecture-refactor/**/*.md
+# phase6-deployment-strategies/**/*.md
+# phase7-security-reliability/**/*.md
+# phase8-application-v3/**/*.md
+# k8s-chatbot/docs/
+
+
+# ------------------------------------------------------------
+# SECTION 12: Articles / Blog Series — Vietnamese Reference
+# Useful for reading, keep out of production repo
+# ------------------------------------------------------------
+articles/
+
+
+# ------------------------------------------------------------
+# SECTION 13: Build Artifacts & Compiled Output
+# ------------------------------------------------------------
+*.log
+*.bak
+*.tmp
+*.temp
+.cache/
+*.pid
+*.seed
+*.pid.lock
