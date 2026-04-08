@@ -74,6 +74,8 @@ jobs:
               - 'common/**'
             backend:
               - 'backend/**'
+            workflow:
+              - '.github/workflows/ci.yml'
 
       - name: Build services list
         id: services
@@ -89,7 +91,7 @@ jobs:
             exit 0
           fi
 
-          # Auto detect — common/backend changes affect all services
+          # Auto detect — common/backend/workflow changes affect all services
           CHANGED=""
           [ "${{ steps.filter.outputs.auth-service }}" == "true" ]       && CHANGED="$CHANGED,auth-service"
           [ "${{ steps.filter.outputs.account-service }}" == "true" ]      && CHANGED="$CHANGED,account-service"
@@ -98,6 +100,7 @@ jobs:
           [ "${{ steps.filter.outputs.frontend }}" == "true" ]            && CHANGED="$CHANGED,frontend"
           [ "${{ steps.filter.outputs.common }}" == "true" ]              && CHANGED="$CHANGED,auth-service,account-service,transfer-service,notification-service"
           [ "${{ steps.filter.outputs.backend }}" == "true" ]              && CHANGED="$CHANGED,auth-service,account-service,transfer-service,notification-service"
+          [ "${{ steps.filter.outputs.workflow }}" == "true" ]            && CHANGED="$CHANGED,auth-service,account-service,transfer-service,notification-service,frontend"
 
           CHANGED=$(echo "$CHANGED" | sed 's/^,//' | tr ',' '\n' | sort -u | grep -v '^$' | tr '\n' ',' | sed 's/,$//')
 
