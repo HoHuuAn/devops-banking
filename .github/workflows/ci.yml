@@ -319,7 +319,11 @@ jobs:
         if: steps.should-push.outputs.push == 'true'
         run: |
           IMAGE="${{ env.IMAGE_REPO }}/${{ matrix.service }}"
-          LOADED=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "$IMAGE:" | head -1)
+          echo "Looking for: $IMAGE"
+          docker images | grep "$IMAGE" || echo "No image found for $IMAGE"
+          LOADED=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^$IMAGE:" | head -1)
+          echo "Loaded: $LOADED"
+          if [ -z "$LOADED" ]; then echo "ERROR: No image found"; exit 1; fi
           for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
             docker tag "$LOADED" "$tag"
             docker push "$tag"
