@@ -289,7 +289,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: image-${{ matrix.service }}
-          path: /tmp
+          path: /tmp/${{ matrix.service }}.tar
         continue-on-error: true
 
       - name: Load image
