@@ -259,7 +259,7 @@ jobs:
     needs: [detect-changes, build-images]
     if: |
       always() &&
-      github.ref == 'refs/heads/main'
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     strategy:
       fail-fast: false
       matrix:
@@ -289,12 +289,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: image-${{ matrix.service }}
-          path: /tmp/${{ matrix.service }}.tar
-        continue-on-error: true
+          path: /tmp
 
       - name: Load image
         if: steps.should-push.outputs.push == 'true'
-        run: docker load -i /tmp/${{ matrix.service }}.tar
+        run: |
+          docker load -i /tmp/image-${{ matrix.service }}.tar
+          if [ $? -ne 0 ]; then echo "ERROR: Failed to load image"; exit 1; fi
 
       - name: Log in to Docker Hub
         if: steps.should-push.outputs.push == 'true'
@@ -339,7 +340,7 @@ jobs:
     needs: [detect-changes, push-images]
     if: |
       always() &&
-      github.ref == 'refs/heads/main'
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     strategy:
       fail-fast: false
       matrix:
