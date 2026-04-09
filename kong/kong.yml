@@ -96,6 +96,7 @@ services:
       - name: notification-ws-route
         paths:
           - /ws
+        strip_path: false
         protocols:
           - http
           - https

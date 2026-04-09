@@ -26,6 +26,11 @@ export default function Dashboard({ onLogout }) {
     setNotifs(Array.isArray(n) ? n : (n.items || []));
   };
 
+  const refreshBalance = async () => {
+    const m = await api.me();
+    setMe(m);
+  };
+
   useEffect(() => {
     load().catch(console.error);
 
@@ -45,34 +50,35 @@ export default function Dashboard({ onLogout }) {
       try {
         const data = JSON.parse(ev.data);
         setNotifs((prev) => [data, ...prev].slice(0, 50));
-      } catch {}
+        refreshBalance().catch(() => { });
+      } catch { }
     };
 
     return () => {
-      try { ws && ws.close(); } catch {}
+      try { ws && ws.close(); } catch { }
     };
   }, [wsUrl, session]);
 
   const doTransfer = async () => {
     setErr(""); setMsg("");
-    
+
     // Input validation
     if (!toUser || !toUser.trim()) {
       setErr("Please enter recipient username");
       return;
     }
-    
+
     const amountNum = Number(amount);
     if (!amount || isNaN(amountNum) || amountNum <= 0) {
       setErr("Please enter a valid amount greater than 0");
       return;
     }
-    
+
     if (!Number.isInteger(amountNum)) {
       setErr("Amount must be a whole number");
       return;
     }
-    
+
     try {
       const r = await api.transfer(toUser.trim(), amountNum);
       setMsg(`Transfer success: ${r.amount} to ${r.to}`);
@@ -92,8 +98,8 @@ export default function Dashboard({ onLogout }) {
     wsStatus === "connected"
       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
       : wsStatus === "error"
-      ? "bg-red-50 text-red-700 border-red-200"
-      : "bg-slate-50 text-slate-600 border-slate-200";
+        ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-slate-50 text-slate-600 border-slate-200";
 
   return (
     <Layout user={me?.username} env="LAB" onLogout={logout}>
@@ -143,12 +149,6 @@ export default function Dashboard({ onLogout }) {
                 >
                   Transfer
                 </button>
-                <button
-                  onClick={() => load().catch(()=>{})}
-                  className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Refresh
-                </button>
               </div>
 
               {msg && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{msg}</div>}
@@ -156,17 +156,28 @@ export default function Dashboard({ onLogout }) {
             </div>
           </Card>
 
-          <Card title="Demo notes" desc="What to explain in interview">
+          {/* <Card title="Demo notes" desc="What to explain in interview">
             <ul className="list-disc pl-5 text-sm text-slate-700 space-y-2">
               <li>Session stored in <b>Redis</b> → backend stateless</li>
               <li>Balance & transfers stored in <b>Postgres</b></li>
               <li>Realtime notify via <b>WebSocket</b> (Ingress supports WS)</li>
               <li>Scale pods: notify works cross-pod using Redis pub/sub (next step)</li>
             </ul>
-          </Card>
+          </Card> */}
         </div>
 
-        <Card title="Notifications" desc="Incoming transfer notifications (WebSocket)">
+        <Card
+          title="Notifications"
+          desc="Incoming transfer notifications (WebSocket)"
+          right={
+            <button
+              onClick={() => load().catch(() => { })}
+              className="rounded-xl border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Refresh
+            </button>
+          }
+        >
           <div className="space-y-3">
             {notifs.length === 0 && (
               <div className="rounded-xl border bg-slate-50 px-4 py-3 text-sm text-slate-600">

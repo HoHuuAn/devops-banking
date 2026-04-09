@@ -24,12 +24,14 @@ export default function Register({ onGoLogin }) {
   };
 
   return (
-    <Card
-      title="Create account"
-      desc="Register a new user to test transfers and realtime notifications."
-      footer="Security note: bcrypt has max 72 bytes password (lab constraint)."
-    >
-      <div className="space-y-4">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-7 shadow-sm">
+        <Card
+          title="Create account"
+          desc="Register a new user to test transfers and realtime notifications."
+          footer="Security note: bcrypt has max 72 bytes password (lab constraint)."
+        >
+          <div className="space-y-4">
         <div>
           <label className="text-xs font-medium text-slate-600">Username</label>
           <input
@@ -80,6 +82,8 @@ export default function Register({ onGoLogin }) {
           </div>
         )}
       </div>
-    </Card>
+        </Card>
+      </div>
+    </div>
   );
 }

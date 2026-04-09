@@ -23,7 +23,7 @@ export default function Login({ onOk, onGoRegister }) {
         <div className="flex items-center gap-3 mb-5">
           <div className="h-10 w-10 rounded-xl bg-blue-600 text-white grid place-items-center font-bold">B</div>
           <div>
-            <div className="text-base font-semibold text-slate-900">NPD Banking</div>
+            <div className="text-base font-semibold text-slate-900">Banking</div>
             <div className="text-xs text-slate-500">Postgres • Redis Session • WebSocket Notify</div>
           </div>
         </div>
@@ -70,9 +70,6 @@ export default function Login({ onOk, onGoRegister }) {
           </div>
         )}
 
-        <div className="mt-5 text-xs text-slate-400">
-          © Banking Demo Lab • Postgres + Redis
-        </div>
       </div>
     </div>
   );

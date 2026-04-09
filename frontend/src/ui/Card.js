@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function Card({ title, desc, right, children }) {
+export default function Card({ title, desc, right, footer, children }) {
   return (
     <div className="rounded-2xl border bg-white p-5 shadow-sm">
       {(title || desc || right) && (
@@ -13,6 +13,7 @@ export default function Card({ title, desc, right, children }) {
         </div>
       )}
       {children}
+      {footer && <div className="mt-4 text-xs text-slate-400">{footer}</div>}
     </div>
   );
 }
