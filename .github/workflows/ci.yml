@@ -1,7 +1,6 @@
 name: CI
 
 # ============================================================
-# WEEK 4 — GitHub Actions CI Pipeline
 # Triggers: push to main/dev
 # Builds:  auth-service, account-service, transfer-service,
 #         notification-service, frontend
