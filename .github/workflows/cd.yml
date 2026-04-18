@@ -1,0 +1,201 @@
+name: CD
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_call:
+    inputs:
+      host:
+        description: SSH host (VM public IP or DNS)
+        required: true
+        type: string
+      username:
+        description: SSH username
+        required: true
+        type: string
+      ssh_port:
+        description: SSH port
+        required: false
+        type: string
+        default: "22"
+      remote_path:
+        description: Remote path where compose files are deployed
+        required: false
+        type: string
+        default: /opt/devops-banking
+      image_tag:
+        description: Docker image tag to deploy (v1 or v2)
+        required: false
+        type: string
+        default: v1
+    secrets:
+      KEY_SSH:
+        required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_TOKEN:
+        required: true
+
+  workflow_dispatch:
+    inputs:
+      host:
+        description: SSH host (VM public IP or DNS)
+        required: true
+        type: string
+      username:
+        description: SSH username
+        required: true
+        type: string
+      ssh_port:
+        description: SSH port
+        required: false
+        default: "22"
+        type: string
+      remote_path:
+        description: Remote path where compose files are deployed
+        required: false
+        default: /opt/devops-banking
+        type: string
+      image_tag:
+        description: Docker image tag to deploy
+        required: false
+        default: v1
+        type: choice
+        options:
+          - v1
+          - v2
+
+jobs:
+  deploy:
+    name: Deploy to VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Resolve deployment inputs
+        id: resolve
+        run: |
+          HOST="${{ inputs.host }}"
+          USERNAME="${{ inputs.username }}"
+          SSH_PORT="${{ inputs.ssh_port }}"
+          REMOTE_PATH="${{ inputs.remote_path }}"
+          TAG="${{ inputs.image_tag }}"
+
+          if [ -z "$HOST" ]; then
+            HOST="${{ github.event.inputs.host }}"
+          fi
+          if [ -z "$USERNAME" ]; then
+            USERNAME="${{ github.event.inputs.username }}"
+          fi
+          if [ -z "$SSH_PORT" ]; then
+            SSH_PORT="${{ github.event.inputs.ssh_port }}"
+          fi
+          if [ -z "$REMOTE_PATH" ]; then
+            REMOTE_PATH="${{ github.event.inputs.remote_path }}"
+          fi
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          fi
+
+          if [ -z "$SSH_PORT" ]; then
+            SSH_PORT="22"
+          fi
+          if [ -z "$REMOTE_PATH" ]; then
+            REMOTE_PATH="/opt/devops-banking"
+          fi
+          if [ -z "$TAG" ]; then
+            TAG="v1"
+          fi
+
+          if [ "$TAG" != "v1" ] && [ "$TAG" != "v2" ]; then
+            echo "Unsupported image tag: $TAG"
+            echo "Supported tags: v1, v2"
+            exit 1
+          fi
+
+          echo "host=$HOST" >> $GITHUB_OUTPUT
+          echo "username=$USERNAME" >> $GITHUB_OUTPUT
+          echo "ssh_port=$SSH_PORT" >> $GITHUB_OUTPUT
+          echo "remote_path=$REMOTE_PATH" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Validate deployment configuration
+        env:
+          SSH_HOST: ${{ steps.resolve.outputs.host }}
+          SSH_USER: ${{ steps.resolve.outputs.username }}
+          SSH_KEY: ${{ secrets.KEY_SSH }}
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASS: ${{ secrets.DOCKER_TOKEN }}
+        run: |
+          set -e
+          [ -n "$SSH_HOST" ] || (echo "Missing deployment host"; exit 1)
+          [ -n "$SSH_USER" ] || (echo "Missing deployment username"; exit 1)
+          [ -n "$SSH_KEY" ] || (echo "Missing repository secret KEY_SSH"; exit 1)
+          [ -n "$DOCKER_USER" ] || (echo "Missing repository secret DOCKER_USERNAME"; exit 1)
+          [ -n "$DOCKER_PASS" ] || (echo "Missing repository secret DOCKER_TOKEN"; exit 1)
+
+      - name: Ensure remote directory exists
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ steps.resolve.outputs.host }}
+          username: ${{ steps.resolve.outputs.username }}
+          key: ${{ secrets.KEY_SSH }}
+          port: ${{ steps.resolve.outputs.ssh_port }}
+          script_stop: true
+          script: |
+            mkdir -p "${{ steps.resolve.outputs.remote_path }}/kong"
+
+      - name: Upload compose and Kong config
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ steps.resolve.outputs.host }}
+          username: ${{ steps.resolve.outputs.username }}
+          key: ${{ secrets.KEY_SSH }}
+          port: ${{ steps.resolve.outputs.ssh_port }}
+          source: "docker-compose.deploy.yml,kong/kong.yml"
+          target: ${{ steps.resolve.outputs.remote_path }}
+          overwrite: true
+
+      - name: Pull and deploy on VM
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ steps.resolve.outputs.tag }}
+          REMOTE_APP_DIR: ${{ steps.resolve.outputs.remote_path }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+        with:
+          host: ${{ steps.resolve.outputs.host }}
+          username: ${{ steps.resolve.outputs.username }}
+          key: ${{ secrets.KEY_SSH }}
+          port: ${{ steps.resolve.outputs.ssh_port }}
+          script_stop: true
+          envs: IMAGE_TAG,REMOTE_APP_DIR,DOCKER_USERNAME,DOCKER_TOKEN
+          script: |
+            set -e
+            cd "$REMOTE_APP_DIR"
+
+            echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+            cat > .deploy.env <<EOF
+            DOCKER_USERNAME=$DOCKER_USERNAME
+            IMAGE_TAG=$IMAGE_TAG
+            EOF
+
+            docker compose --env-file .deploy.env -f docker-compose.deploy.yml down --remove-orphans --volumes || true
+            docker image prune -af || true
+            docker volume prune -f || true
+            docker network prune -f || true
+
+            docker compose --env-file .deploy.env -f docker-compose.deploy.yml pull
+            docker compose --env-file .deploy.env -f docker-compose.deploy.yml up -d
+            docker compose --env-file .deploy.env -f docker-compose.deploy.yml ps
+
+      - name: Deployment summary
+        run: |
+          echo "## CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Host:** ${{ steps.resolve.outputs.host }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Remote path:** ${{ steps.resolve.outputs.remote_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image tag:** ${{ steps.resolve.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
