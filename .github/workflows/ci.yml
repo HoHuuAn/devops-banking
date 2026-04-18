@@ -380,7 +380,7 @@ jobs:
       host: ${{ vars.HOST }}
       username: ${{ vars.USERNAME }}
       ssh_port: "22"
-      remote_path: "/opt/devops-banking"
+      remote_path: "/home/superadmin"
       image_tag: v1
     secrets: inherit
 

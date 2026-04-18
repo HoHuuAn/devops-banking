@@ -23,7 +23,7 @@ on:
         description: Remote path where compose files are deployed
         required: false
         type: string
-        default: /opt/devops-banking
+        default: /home/superadmin
       image_tag:
         description: Docker image tag to deploy (v1 or v2)
         required: false
@@ -55,7 +55,7 @@ on:
       remote_path:
         description: Remote path where compose files are deployed
         required: false
-        default: /opt/devops-banking
+        default: /home/superadmin
         type: string
       image_tag:
         description: Docker image tag to deploy
@@ -103,7 +103,7 @@ jobs:
             SSH_PORT="22"
           fi
           if [ -z "$REMOTE_PATH" ]; then
-            REMOTE_PATH="/opt/devops-banking"
+            REMOTE_PATH="/home/superadmin"
           fi
           if [ -z "$TAG" ]; then
             TAG="v1"
