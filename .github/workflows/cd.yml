@@ -39,24 +39,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      host:
-        description: SSH host (VM public IP or DNS)
-        required: true
-        type: string
-      username:
-        description: SSH username
-        required: true
-        type: string
-      ssh_port:
-        description: SSH port
-        required: false
-        default: "22"
-        type: string
-      remote_path:
-        description: Remote path where compose files are deployed
-        required: false
-        default: /home/superadmin
-        type: string
       image_tag:
         description: Docker image tag to deploy
         required: false
@@ -83,19 +65,11 @@ jobs:
           REMOTE_PATH="${{ inputs.remote_path }}"
           TAG="${{ inputs.image_tag }}"
 
-          if [ -z "$HOST" ]; then
-            HOST="${{ github.event.inputs.host }}"
-          fi
-          if [ -z "$USERNAME" ]; then
-            USERNAME="${{ github.event.inputs.username }}"
-          fi
-          if [ -z "$SSH_PORT" ]; then
-            SSH_PORT="${{ github.event.inputs.ssh_port }}"
-          fi
-          if [ -z "$REMOTE_PATH" ]; then
-            REMOTE_PATH="${{ github.event.inputs.remote_path }}"
-          fi
-          if [ -z "$TAG" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            HOST="${{ vars.HOST }}"
+            USERNAME="${{ vars.USERNAME }}"
+            SSH_PORT="22"
+            REMOTE_PATH="/home/superadmin"
             TAG="${{ github.event.inputs.image_tag }}"
           fi
 
