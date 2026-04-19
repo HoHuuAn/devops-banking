@@ -3,9 +3,33 @@ import Layout from "./ui/Layout";
 import Card from "./ui/Card";
 import { api, getSession, clearSession } from "./api";
 
-export default function Dashboard({ onLogout }) {
+function toEnglishNotification(message) {
+  if (typeof message !== "string") return message;
+
+  const received = message.match(/^Bạn nhận\s+(.+?)\s+từ\s+(.+)$/i);
+  if (received) {
+    return `You received ${received[1]} from ${received[2]}`;
+  }
+
+  const sent = message.match(/^Bạn đã chuyển\s+(.+?)\s+đến\s+(.+)$/i);
+  if (sent) {
+    return `You sent ${sent[1]} to ${sent[2]}`;
+  }
+
+  return message;
+}
+
+function normalizeNotifications(items) {
+  return (Array.isArray(items) ? items : []).map((item) => ({
+    ...item,
+    message: toEnglishNotification(item?.message),
+  }));
+}
+
+export default function Dashboard({ onLogout, onGoAdmin }) {
   const [me, setMe] = useState(null);
-  const [toUser, setToUser] = useState("");
+  const [toAccount, setToAccount] = useState("");
+  const [toName, setToName] = useState("");
   const [amount, setAmount] = useState("");
   const [notifs, setNotifs] = useState([]);
   const [wsStatus, setWsStatus] = useState("disconnected");
@@ -23,7 +47,7 @@ export default function Dashboard({ onLogout }) {
     const m = await api.me();
     setMe(m);
     const n = await api.notifications().catch(() => []);
-    setNotifs(Array.isArray(n) ? n : (n.items || []));
+    setNotifs(normalizeNotifications(Array.isArray(n) ? n : (n.items || [])));
   };
 
   const refreshBalance = async () => {
@@ -49,7 +73,12 @@ export default function Dashboard({ onLogout }) {
     ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        setNotifs((prev) => [data, ...prev].slice(0, 50));
+        const normalized = {
+          ...data,
+          message: toEnglishNotification(data?.message),
+          created_at: data?.created_at || new Date().toISOString(),
+        };
+        setNotifs((prev) => [normalized, ...prev].slice(0, 50));
         refreshBalance().catch(() => { });
       } catch { }
     };
@@ -63,8 +92,8 @@ export default function Dashboard({ onLogout }) {
     setErr(""); setMsg("");
 
     // Input validation
-    if (!toUser || !toUser.trim()) {
-      setErr("Please enter recipient username");
+    if (!toAccount || !toAccount.trim()) {
+      setErr("Please enter recipient account number");
       return;
     }
 
@@ -80,12 +109,24 @@ export default function Dashboard({ onLogout }) {
     }
 
     try {
-      const r = await api.transfer(toUser.trim(), amountNum);
-      setMsg(`Transfer success: ${r.amount} to ${r.to}`);
-      setToUser(""); setAmount("");
+      const r = await api.transfer(toAccount.trim(), amountNum);
+      setMsg(`Transfer success: ${r.amount} to ${r.to} (${r.to_account_number})`);
+      setToAccount(""); setToName(""); setAmount("");
       await load();
     } catch (e) {
       setErr(e.message);
+    }
+  };
+
+  const lookup = async (acct) => {
+    const v = (acct || "").trim();
+    setToName("");
+    if (!v) return;
+    try {
+      const r = await api.lookupAccount(v);
+      setToName(r.username || "");
+    } catch {
+      setToName("");
     }
   };
 
@@ -102,9 +143,9 @@ export default function Dashboard({ onLogout }) {
         : "bg-slate-50 text-slate-600 border-slate-200";
 
   return (
-    <Layout user={me?.username} env="LAB" onLogout={logout}>
+    <Layout user={me?.username} env="LAB" onLogout={logout} onGoAdmin={onGoAdmin} activePage="dashboard">
       <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2">
           <Card
             title="Account"
             desc="User & available balance"
@@ -119,6 +160,16 @@ export default function Dashboard({ onLogout }) {
                 <div className="text-xs text-slate-500">User</div>
                 <div className="text-sm font-semibold text-slate-900">{me?.username || "-"}</div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Phone</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{me?.phone || "-"}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Account number</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{me?.account_number || "-"}</div>
+                </div>
+              </div>
               <div className="rounded-2xl bg-blue-50 p-4">
                 <div className="text-xs text-blue-700">Available balance</div>
                 <div className="mt-1 text-2xl font-bold text-blue-900">
@@ -132,10 +183,15 @@ export default function Dashboard({ onLogout }) {
             <div className="space-y-3">
               <input
                 className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Recipient username (e.g. hieuny)"
-                value={toUser}
-                onChange={(e) => setToUser(e.target.value)}
+                placeholder="Recipient account number (e.g. 123456789012)"
+                inputMode="numeric"
+                value={toAccount}
+                onChange={(e) => setToAccount(e.target.value)}
+                onBlur={(e) => lookup(e.target.value)}
               />
+              <div className={`rounded-xl border px-4 py-3 text-sm ${toName ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-slate-50 text-slate-700"}`}>
+                Receiver: <span className="font-semibold">{toName || "—"}</span>
+              </div>
               <input
                 className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Amount (e.g. 1000)"
@@ -149,6 +205,12 @@ export default function Dashboard({ onLogout }) {
                 >
                   Transfer
                 </button>
+                {/* <button
+                  onClick={() => load().catch(() => { })}
+                  className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Refresh
+                </button> */}
               </div>
 
               {msg && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{msg}</div>}
@@ -188,7 +250,7 @@ export default function Dashboard({ onLogout }) {
             {notifs.map((n, idx) => (
               <div key={n.id ?? idx} className="rounded-xl border px-4 py-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-slate-900">notification</div>
+                  <div className="text-sm font-semibold text-slate-900">Notification</div>
                   <div className="text-xs text-slate-500">
                     {n.created_at ? new Date(n.created_at).toLocaleString() : ""}
                   </div>

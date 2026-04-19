@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { api } from "./api";
-import Card from "./ui/Card";
 
 export default function Register({ onGoLogin }) {
+  const [phone, setPhone] = useState("");
   const [username, setU] = useState("");
   const [password, setP] = useState("");
   const [msg, setMsg] = useState("");
@@ -14,8 +14,8 @@ export default function Register({ onGoLogin }) {
     setLoading(true);
     setErr(""); setMsg("");
     try {
-      await api.register(username, password);
-      setMsg("Account created. Please sign in.");
+      const r = await api.register(phone, username, password);
+      setMsg(`Account created. Your account number: ${r.account_number}. Please sign in.`);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -26,34 +26,43 @@ export default function Register({ onGoLogin }) {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-7 shadow-sm">
-        <Card
-          title="Create account"
-          desc="Register a new user to test transfers and realtime notifications."
-          footer="Security note: bcrypt has max 72 bytes password (lab constraint)."
-        >
-          <div className="space-y-4">
-        <div>
-          <label className="text-xs font-medium text-slate-600">Username</label>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white grid place-items-center font-bold">B</div>
+          <div>
+            <div className="text-base font-semibold text-slate-900">Banking</div>
+            <div className="text-xs text-slate-500">Postgres • Redis Session • WebSocket Notify</div>
+          </div>
+        </div>
+
+        <h2 className="text-xl font-semibold text-slate-900">Create account</h2>
+        <p className="text-sm text-slate-500 mt-1 mb-5">
+          Register a new user to test transfers and realtime notifications.
+        </p>
+
+        <div className="space-y-3">
           <input
-            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="unique username"
+            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Phone number (digits only)"
+            inputMode="numeric"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+          <input
+            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Display name"
             value={username}
             onChange={(e) => setU(e.target.value)}
           />
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-slate-600">Password</label>
           <input
-            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="min 6 chars"
+            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Password (min 6 chars)"
             type="password"
             value={password}
             onChange={(e) => setP(e.target.value)}
           />
         </div>
 
-        <div className="flex gap-3 pt-2">
+        <div className="mt-5 flex gap-3">
           <button
             type="button"
             disabled={loading}
@@ -65,24 +74,26 @@ export default function Register({ onGoLogin }) {
           <button
             type="button"
             onClick={onGoLogin}
-            className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             Back
           </button>
         </div>
 
         {msg && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             {msg}
           </div>
         )}
         {err && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {err}
           </div>
         )}
-      </div>
-        </Card>
+
+        <div className="mt-5 text-xs text-slate-400">
+          Security note: bcrypt has max 72 bytes password (lab constraint).
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-import os
-import asyncio
+import os, asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,32 +9,41 @@ from redis.asyncio import Redis
 
 from common.db import SessionLocal, engine, Base
 from common.models import Notification
-from common.redis_utils import get_user_id_from_session, set_presence
+from common.redis_utils import get_user_id_from_session, set_presence, create_redis_client
 from common.observability import instrument_fastapi
+from common.logging_utils import get_json_logger, RequestLogMiddleware, log_event, setup_exception_logging
 
 Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
+logger = get_json_logger("notification-service")
+
 redis: Redis | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis
-    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    redis = await create_redis_client(REDIS_URL)
     yield
     if redis:
         await redis.close()
 
 app = FastAPI(title="Notification Service", lifespan=lifespan)
 instrument_fastapi(app, "notification-service")
+setup_exception_logging(app, logger, "notification-service")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in CORS_ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+app.add_middleware(
+    RequestLogMiddleware,
+    logger=logger,
+    service_name="notification-service",
 )
 
 def get_db():
@@ -53,6 +62,9 @@ async def list_notifications(x_session: str | None = Header(default=None), db: S
         .scalars()
         .all()
     )
+
+    log_event(logger, "notifications_list_success", user_id=user_id, count=len(items))
+
     return [{
         "id": x.id,
         "message": x.message,
@@ -65,16 +77,19 @@ async def ws(websocket: WebSocket):
     """WebSocket endpoint for real-time notifications"""
     session = websocket.query_params.get("session")
     if not session:
+        log_event(logger, "ws_rejected", reason="MISSING_SESSION", client=str(websocket.client))
         await websocket.close(code=1008)
         return
 
     try:
         user_id = await get_user_id_from_session(redis, session)
     except HTTPException:
+        log_event(logger, "ws_rejected", reason="INVALID_SESSION", client=str(websocket.client))
         await websocket.close(code=1008)
         return
 
     await websocket.accept()
+    log_event(logger, "ws_connected", user_id=user_id, client=str(websocket.client))
 
     pubsub = redis.pubsub()
     await pubsub.subscribe(f"notify:{user_id}")
@@ -83,7 +98,7 @@ async def ws(websocket: WebSocket):
         try:
             while True:
                 await set_presence(redis, user_id, True)
-                await asyncio.sleep(20)  # refresh TTL
+                await asyncio.sleep(20)
         except Exception:
             pass
 
@@ -93,6 +108,7 @@ async def ws(websocket: WebSocket):
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg and msg.get("type") == "message":
                     await websocket.send_json({"type": "notification", "message": msg["data"]})
+                    log_event(logger, "ws_push", user_id=user_id, message=msg["data"])
                 await asyncio.sleep(0.05)
         except Exception:
             pass
@@ -102,10 +118,9 @@ async def ws(websocket: WebSocket):
 
     try:
         while True:
-            # receive to keep connection alive (client can send ping)
             await websocket.receive_text()
     except WebSocketDisconnect:
-        pass
+        log_event(logger, "ws_disconnected", user_id=user_id)
     finally:
         p_task.cancel()
         n_task.cancel()
@@ -130,9 +145,9 @@ async def health_check():
             db_status = "error"
         finally:
             db.close()
-
+        
         redis_status = "ok" if redis else "error"
-
+        
         if db_status == "ok" and redis_status == "ok":
             return {"status": "healthy", "service": "notification-service", "database": db_status, "redis": redis_status}
         else:

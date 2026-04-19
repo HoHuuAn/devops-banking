@@ -1,35 +1,42 @@
 import os
+import secrets
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
 from common.db import SessionLocal, engine, Base
 from common.models import User
 from common.auth import hash_password, verify_password
-from common.redis_utils import create_session
+from common.redis_utils import create_session, create_redis_client
 from common.observability import instrument_fastapi
+from common.logging_utils import get_json_logger, RequestLogMiddleware, log_event, setup_exception_logging
 
 Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
+logger = get_json_logger("auth-service")
+
 redis: Redis | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis
-    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    redis = await create_redis_client(REDIS_URL)
     yield
     if redis:
         await redis.close()
 
 app = FastAPI(title="Auth Service", lifespan=lifespan)
 instrument_fastapi(app, "auth-service")
+setup_exception_logging(app, logger, "auth-service")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in CORS_ORIGINS],
@@ -37,6 +44,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLogMiddleware, logger=logger, service_name="auth-service")
 
 def get_db():
     db = SessionLocal()
@@ -45,39 +53,136 @@ def get_db():
     finally:
         db.close()
 
+
+def _gen_account_number() -> str:
+    # 12-digit numeric, demo-friendly (không phải IBAN thật)
+    return "".join(str(secrets.randbelow(10)) for _ in range(12))
+
+
+def _mask_phone(phone: str) -> str:
+    phone = phone.strip()
+    if len(phone) <= 4:
+        return "*" * len(phone)
+    return phone[:2] + ("*" * (len(phone) - 4)) + phone[-2:]
+
+
 class RegisterReq(BaseModel):
-    username: str
-    password: str
+    phone: str = Field(min_length=8, max_length=20)
+    username: str = Field(min_length=2, max_length=50)  # display name
+    password: str = Field(min_length=6, max_length=128)
 
 class LoginReq(BaseModel):
-    username: str
-    password: str
+    # backward-compatible:
+    # - v2: phone
+    # - v1: username
+    phone: str | None = Field(default=None, min_length=8, max_length=20)
+    username: str | None = Field(default=None, min_length=2, max_length=50)
+    password: str = Field(min_length=6, max_length=128)
 
 @app.post("/register")
 async def register(body: RegisterReq, db: Session = Depends(get_db)):
     """Register a new user"""
-    if len(body.username) < 3 or len(body.password) < 6:
-        raise HTTPException(400, "Username >=3, password >=6")
+    phone = body.phone.strip()
+    username = body.username.strip()
+    if not phone.isdigit():
+        log_event(logger, "register_failed", reason="PHONE_NOT_DIGITS", phone=phone, username=username)
+        raise HTTPException(400, "Phone must be digits only")
 
-    exists = db.execute(select(User).where(User.username == body.username)).scalar_one_or_none()
-    if exists:
-        raise HTTPException(409, "Username already exists")
+    exists_phone = db.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
+    if exists_phone:
+        log_event(logger, "register_failed", reason="PHONE_EXISTS", phone=phone, username=username)
+        raise HTTPException(409, "Phone already exists")
 
-    u = User(username=body.username, password_hash=hash_password(body.password))
+    account_number = None
+    for _ in range(20):
+        candidate = _gen_account_number()
+        taken = db.execute(select(User).where(User.account_number == candidate)).scalar_one_or_none()
+        if not taken:
+            account_number = candidate
+            break
+    if not account_number:
+        log_event(logger, "register_failed", reason="ACCOUNT_NUMBER_GENERATION_EXHAUSTED", phone=phone, username=username)
+        raise HTTPException(503, "Cannot generate account number, retry later")
+
+    u = User(
+        phone=phone,
+        account_number=account_number,
+        username=username,
+        password_hash=hash_password(body.password),
+    )
     db.add(u)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        detail = str(exc.orig) if exc.orig else str(exc)
+        log_event(logger, "register_failed", reason="DUPLICATE_KEY", phone=phone, username=username, detail=detail)
+        if "phone" in detail:
+            raise HTTPException(409, "Phone already exists")
+        if "username" in detail:
+            raise HTTPException(409, "Username already exists")
+        raise HTTPException(409, "User already exists")
     db.refresh(u)
-    return {"id": u.id, "username": u.username, "balance": u.balance}
+
+    log_event(
+        logger,
+        "register_success",
+        user_id=u.id,
+        phone=u.phone,
+        username=u.username,
+        account_number=u.account_number,
+    )
+    return {
+        "id": u.id,
+        "phone": _mask_phone(u.phone),
+        "username": u.username,
+        "account_number": u.account_number,
+        "balance": u.balance,
+    }
 
 @app.post("/login")
 async def login(body: LoginReq, db: Session = Depends(get_db)):
     """Login and create session"""
-    u = db.execute(select(User).where(User.username == body.username)).scalar_one_or_none()
+    phone = (body.phone or "").strip()
+    username = (body.username or "").strip()
+
+    if phone:
+        if not phone.isdigit():
+            log_event(logger, "login_failed", reason="PHONE_NOT_DIGITS", phone=phone)
+            raise HTTPException(400, "Phone must be digits only")
+        u = db.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
+    elif username:
+        u = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    else:
+        log_event(logger, "login_failed", reason="MISSING_IDENTIFIER")
+        raise HTTPException(400, "Missing phone/username")
+
     if not u or not verify_password(body.password, u.password_hash):
+        log_event(
+            logger,
+            "login_failed",
+            reason="INVALID_CREDENTIALS",
+            phone=phone or username,
+        )
         raise HTTPException(401, "Invalid credentials")
 
     sid = await create_session(redis, u.id)
-    return {"session": sid, "username": u.username, "balance": u.balance}
+
+    log_event(
+        logger,
+        "login_success",
+        user_id=u.id,
+        phone=u.phone,
+        username=u.username,
+        account_number=u.account_number,
+    )
+    return {
+        "session": sid,
+        "phone": _mask_phone(u.phone),
+        "username": u.username,
+        "account_number": u.account_number,
+        "balance": u.balance,
+    }
 
 @app.get("/health")
 async def health_check():
@@ -93,9 +198,9 @@ async def health_check():
             db_status = "error"
         finally:
             db.close()
-
+        
         redis_status = "ok" if redis else "error"
-
+        
         if db_status == "ok" and redis_status == "ok":
             return {"status": "healthy", "service": "auth-service", "database": db_status, "redis": redis_status}
         else:

@@ -4,18 +4,21 @@ from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
 from common.db import SessionLocal, engine, Base
 from common.models import User, Transfer, Notification
-from common.redis_utils import get_user_id_from_session, publish_notify
+from common.redis_utils import get_user_id_from_session, publish_notify, create_redis_client
 from common.observability import instrument_fastapi
+from common.logging_utils import get_json_logger, RequestLogMiddleware, log_event, setup_exception_logging
 
 Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+
+logger = get_json_logger("transfer-service")
 
 redis: Redis | None = None
 
@@ -23,13 +26,14 @@ redis: Redis | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis
-    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    redis = await create_redis_client(REDIS_URL)
     yield
     if redis:
         await redis.close()
 
 app = FastAPI(title="Transfer Service", lifespan=lifespan)
 instrument_fastapi(app, "transfer-service")
+setup_exception_logging(app, logger, "transfer-service")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in CORS_ORIGINS],
@@ -37,6 +41,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLogMiddleware, logger=logger,
+                   service_name="transfer-service")
 
 
 def get_db():
@@ -48,7 +54,12 @@ def get_db():
 
 
 class TransferReq(BaseModel):
-    to_username: str
+    # backward-compatible:
+    # - v2: to_account_number
+    # - v1: to_username
+    to_account_number: str | None = Field(
+        default=None, min_length=6, max_length=30)
+    to_username: str | None = Field(default=None, min_length=2, max_length=50)
     amount: int
 
 
@@ -58,25 +69,91 @@ async def transfer(body: TransferReq, x_session: str | None = Header(default=Non
     user_id = await get_user_id_from_session(redis, x_session)
 
     if body.amount <= 0:
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="INVALID_AMOUNT",
+            amount=body.amount,
+        )
         raise HTTPException(400, "Amount must be > 0")
+
+    to_acct = (body.to_account_number or "").strip()
+    to_username = (body.to_username or "").strip()
+    if not to_acct and not to_username:
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="MISSING_RECEIVER",
+            amount=body.amount,
+        )
+        raise HTTPException(400, "Missing to_account_number/to_username")
+    if to_acct and not to_acct.isdigit():
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="ACCOUNT_NOT_DIGITS",
+            to_account_number=to_acct,
+            amount=body.amount,
+        )
+        raise HTTPException(400, "to_account_number must be digits only")
 
     # Use SELECT FOR UPDATE to prevent race conditions
     sender = db.execute(
         select(User).where(User.id == user_id).with_for_update()
     ).scalar_one_or_none()
     if not sender:
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="SENDER_NOT_FOUND",
+            user_id=user_id,
+            to_account_number=to_acct,
+            to_username=to_username,
+            amount=body.amount,
+        )
         raise HTTPException(404, "Sender not found")
 
-    receiver = db.execute(
-        select(User).where(User.username == body.to_username).with_for_update()
-    ).scalar_one_or_none()
+    if to_acct:
+        receiver = db.execute(
+            select(User).where(User.account_number ==
+                               to_acct).with_for_update()
+        ).scalar_one_or_none()
+    else:
+        # Support old clients temporarily (v1 transfer payload)
+        receiver = db.execute(
+            select(User).where(User.username == to_username).with_for_update()
+        ).scalar_one_or_none()
     if not receiver:
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="RECEIVER_NOT_FOUND",
+            user_id=user_id,
+            to_account_number=to_acct,
+            to_username=to_username,
+            amount=body.amount,
+        )
         raise HTTPException(404, "Receiver not found")
 
     if receiver.id == sender.id:
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="SELF_TRANSFER",
+            user_id=user_id,
+            amount=body.amount,
+        )
         raise HTTPException(400, "Cannot transfer to yourself")
 
     if sender.balance < body.amount:
+        log_event(
+            logger,
+            "transfer_failed",
+            reason="INSUFFICIENT_BALANCE",
+            user_id=user_id,
+            from_balance=sender.balance,
+            amount=body.amount,
+        )
         raise HTTPException(400, "Insufficient balance")
 
     # Update balances + save transfer + notifications within transaction
@@ -86,8 +163,8 @@ async def transfer(body: TransferReq, x_session: str | None = Header(default=Non
     t = Transfer(from_user=sender.id, to_user=receiver.id, amount=body.amount)
     db.add(t)
 
-    msg_sender = f"Bạn đã chuyển {body.amount} đến {receiver.username}"
-    msg_receiver = f"Bạn nhận {body.amount} từ {sender.username}"
+    msg_sender = f"You sent {body.amount} to {receiver.username}"
+    msg_receiver = f"You received {body.amount} from {sender.username}"
 
     db.add(Notification(user_id=sender.id, message=msg_sender))
     db.add(Notification(user_id=receiver.id, message=msg_receiver))
@@ -96,8 +173,27 @@ async def transfer(body: TransferReq, x_session: str | None = Header(default=Non
 
     # Realtime push via redis pubsub (after commit to ensure data consistency)
     await publish_notify(redis, receiver.id, msg_receiver)
+    await publish_notify(redis, sender.id, msg_sender)
 
-    return {"ok": True, "from": sender.username, "to": receiver.username, "amount": body.amount}
+    log_event(
+        logger,
+        "transfer_success",
+        from_user=sender.id,
+        to_user=receiver.id,
+        from_username=sender.username,
+        to_username=receiver.username,
+        from_account_number=sender.account_number,
+        to_account_number=receiver.account_number,
+        amount=body.amount,
+    )
+
+    return {
+        "ok": True,
+        "from": sender.username,
+        "to": receiver.username,
+        "to_account_number": receiver.account_number,
+        "amount": body.amount,
+    }
 
 
 @app.get("/health")

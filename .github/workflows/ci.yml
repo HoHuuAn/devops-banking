@@ -11,11 +11,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: docker.io
   IMAGE_REPO: ${{ format('{0}/devops-banking', secrets.DOCKER_USERNAME) }}
-  RELEASE_TAG: v1
+  RELEASE_TAG: v2
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, version2]
     paths:
       # Only rebuild when source code changes
       - 'services/**'
@@ -164,6 +164,9 @@ jobs:
       - name: Install deps
         run: pip install -r common/requirements.txt
 
+      - name: Install E2E test deps
+        run: pip install requests
+
       - name: Syntax check
         run: |
           python -m compileall common/ services/ -q
@@ -175,6 +178,95 @@ jobs:
           (cd services/account-service && python -c "import sys; sys.path.insert(0, '../common'); print('account-service OK')")
           (cd services/transfer-service && python -c "import sys; sys.path.insert(0, '../common'); print('transfer-service OK')")
           (cd services/notification-service && python -c "import sys; sys.path.insert(0, '../common'); print('notification-service OK')")
+
+      - name: End-to-end test (auth, transfer, notifications)
+        if: needs.detect-changes.outputs.any-change == 'true'
+        run: |
+          set -e
+          docker compose -f docker-compose.yml up -d --build
+
+          # Wait until gateway is reachable via frontend path.
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:3000/api/auth/health >/dev/null; then
+              echo "Gateway is ready"
+              break
+            fi
+            sleep 2
+          done
+
+          python - <<'PY'
+          import time
+          import requests
+
+          BASE = "http://localhost:3000"
+
+          def req(method, path, **kwargs):
+              return requests.request(method, BASE + path, timeout=25, **kwargs)
+
+          suffix = str(int(time.time()))[-8:]
+          phone1 = f"09{suffix}01"
+          phone2 = f"09{suffix}02"
+          user1 = f"ci_user1_{suffix}"
+          user2 = f"ci_user2_{suffix}"
+
+          for phone, username in [(phone1, user1), (phone2, user2)]:
+              r = req("POST", "/api/auth/register", json={
+                  "phone": phone,
+                  "username": username,
+                  "password": "123456",
+              })
+              if r.status_code not in (200, 409):
+                  raise SystemExit(f"register failed: {r.status_code} {r.text}")
+
+          login1 = req("POST", "/api/auth/login", json={"phone": phone1, "password": "123456"})
+          login2 = req("POST", "/api/auth/login", json={"phone": phone2, "password": "123456"})
+          assert login1.status_code == 200, f"login1 failed: {login1.status_code} {login1.text}"
+          assert login2.status_code == 200, f"login2 failed: {login2.status_code} {login2.text}"
+
+          s1 = login1.json()["session"]
+          s2 = login2.json()["session"]
+          h1 = {"X-Session": s1}
+          h2 = {"X-Session": s2}
+
+          me1_before = req("GET", "/api/account/me", headers=h1)
+          me2_before = req("GET", "/api/account/me", headers=h2)
+          assert me1_before.status_code == 200, f"me1 before failed: {me1_before.status_code} {me1_before.text}"
+          assert me2_before.status_code == 200, f"me2 before failed: {me2_before.status_code} {me2_before.text}"
+          u1_before = me1_before.json()
+          u2_before = me2_before.json()
+
+          transfer = req("POST", "/api/transfer/transfer", headers=h1, json={
+              "to_account_number": u2_before["account_number"],
+              "amount": 1000,
+          })
+          assert transfer.status_code == 200, f"transfer failed: {transfer.status_code} {transfer.text}"
+
+          me1_after = req("GET", "/api/account/me", headers=h1).json()
+          me2_after = req("GET", "/api/account/me", headers=h2).json()
+
+          assert me1_after["balance"] == u1_before["balance"] - 1000, (
+              f"sender balance mismatch: {u1_before['balance']} -> {me1_after['balance']}"
+          )
+          assert me2_after["balance"] == u2_before["balance"] + 1000, (
+              f"receiver balance mismatch: {u2_before['balance']} -> {me2_after['balance']}"
+          )
+
+          notif1 = req("GET", "/api/notifications/notifications", headers=h1)
+          notif2 = req("GET", "/api/notifications/notifications", headers=h2)
+          assert notif1.status_code == 200, f"notif1 failed: {notif1.status_code} {notif1.text}"
+          assert notif2.status_code == 200, f"notif2 failed: {notif2.status_code} {notif2.text}"
+
+          msg1 = (notif1.json() or [{}])[0].get("message", "")
+          msg2 = (notif2.json() or [{}])[0].get("message", "")
+          assert msg1.startswith("You sent "), f"sender notification not English: {msg1}"
+          assert msg2.startswith("You received "), f"receiver notification not English: {msg2}"
+
+          print("E2E OK: transfer updates balances and notifications are English.")
+          PY
+
+      - name: Cleanup E2E environment
+        if: always()
+        run: docker compose -f docker-compose.yml down --volumes --remove-orphans || true
 
   # ============================================================
   # Stage 4: Build Docker images → save as artifacts
@@ -233,7 +325,7 @@ jobs:
           tags: |
             type=sha,prefix=
             type=ref,event=branch
-            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ env.RELEASE_TAG }}
 
       - name: Build image tar
         if: steps.should-build.outputs.build == 'true'
@@ -277,9 +369,7 @@ jobs:
     name: Push ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: [detect-changes, build-images]
-    if: |
-      always() &&
-      (github.ref == 'refs/heads/main')
+    if: always()
     strategy:
       fail-fast: false
       matrix:
@@ -344,7 +434,7 @@ jobs:
           tags: |
             type=sha,prefix=
             type=ref,event=branch
-            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ env.RELEASE_TAG }}
 
       - name: Tag and push image
         if: steps.should-push.outputs.push == 'true'
@@ -381,19 +471,17 @@ jobs:
       username: ${{ vars.USERNAME }}
       ssh_port: "22"
       remote_path: "/home/superadmin"
-      image_tag: v1
+      image_tag: v2
     secrets: inherit
 
   # ============================================================
-  # Stage 7: Security scan with Trivy (only on main)
+  # Stage 7: Security scan with Trivy
   # ============================================================
   scan-images:
     name: Scan ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: [detect-changes, push-images]
-    if: |
-      always() &&
-      (github.ref == 'refs/heads/main')
+    if: always() 
     strategy:
       fail-fast: false
       matrix:
@@ -458,6 +546,6 @@ jobs:
           echo "| Lint | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test | ${{ needs.test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build Images | ${{ needs.build-images.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Push Images | ${{ needs.push-images.result == 'success' && '✅' || '⚠️ skipped (not main)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Push Images | ${{ needs.push-images.result == 'success' && '✅' || (needs.push-images.result == 'skipped' && '⚠️ skipped' || '❌') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Deploy to VM | ${{ needs.deploy.result == 'success' && '✅' || (needs.deploy.result == 'skipped' && '⚠️ skipped' || '❌') }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Scan (Trivy) | ${{ needs.scan-images.result == 'success' && '✅' || '⚠️ skipped (not main)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan (Trivy) | ${{ needs.scan-images.result == 'success' && '✅' || (needs.scan-images.result == 'skipped' && '⚠️ skipped' || '❌') }} |" >> $GITHUB_STEP_SUMMARY
