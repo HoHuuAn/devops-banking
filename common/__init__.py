@@ -1,1 +1,1 @@
-# Shared common library (v2)\r\n
+# Shared common library (v2)

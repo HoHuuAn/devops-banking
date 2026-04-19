@@ -4,7 +4,7 @@ Observability: OpenTelemetry tracing + Prometheus metrics.
 - Metrics: Prometheus /metrics endpoint (prometheus_client).
 """
 import os
-from prometheus_client import Counter, Histogram, generate_latest, REGISTRY, CollectorRegistry
+from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
 
 # Default registry with optional service label
 _metrics_registry: CollectorRegistry | None = None
