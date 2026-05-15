@@ -8,6 +8,7 @@ const SECRET_KEY = "admin_secret";
 function AdminLogin({ onAuth, onBack }) {
   const [secret, setSecret] = useState("");
   const [err, setErr] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -32,14 +33,24 @@ function AdminLogin({ onAuth, onBack }) {
           <p className="text-sm text-slate-500">Enter admin secret to continue</p>
         </div>
         <form onSubmit={submit} className="space-y-4">
-          <input
-            type="password"
-            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-500"
-            placeholder="Admin secret"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            autoFocus
-          />
+          <div className="relative">
+            <input
+              type={showSecret ? "text" : "password"}
+              className="w-full rounded-xl border px-4 py-3 pr-16 text-sm outline-none focus:ring-2 focus:ring-amber-500"
+              placeholder="Admin secret"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+              aria-label={showSecret ? "Hide admin secret" : "Show admin secret"}
+            >
+              {showSecret ? "Hide" : "Show"}
+            </button>
+          </div>
           <button
             type="submit"
             className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700"
@@ -147,8 +158,8 @@ function UserDetailModal({ user, secret, onClose }) {
               <div
                 key={t.id}
                 className={`flex items-center justify-between rounded-xl border px-4 py-2 text-sm ${t.direction === "in"
-                    ? "border-emerald-200 bg-emerald-50"
-                    : "border-red-200 bg-red-50"
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-red-200 bg-red-50"
                   }`}
               >
                 <div>
@@ -270,6 +281,19 @@ export default function Admin({ onBack }) {
     loadAllServiceHealth();
   }, [authed, page, search, secret, transfersPage, notificationsPage, loadStats, loadUsers, loadTransfers, loadNotifications, loadAllServiceHealth]);
 
+  const refreshUsers = () => {
+    loadStats(secret);
+    loadUsers(secret, page, search);
+  };
+
+  const refreshTransfers = () => {
+    loadTransfers(secret, transfersPage);
+  };
+
+  const refreshNotifications = () => {
+    loadNotifications(secret, notificationsPage);
+  };
+
   const doSearch = (e) => {
     e.preventDefault();
     setSearch(searchInput);
@@ -310,7 +334,19 @@ export default function Admin({ onBack }) {
         {adminSubPage === "overview" && (
           <>
             {stats && <StatsCards stats={stats} />}
-            <Card title="Users" desc={`${total} total users`}>
+            <Card
+              title="Users"
+              desc={`${total} total users`}
+              right={(
+                <button
+                  type="button"
+                  onClick={refreshUsers}
+                  className="rounded-lg border px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Refresh
+                </button>
+              )}
+            >
               <form onSubmit={doSearch} className="mb-4 flex gap-2">
                 <input
                   className="flex-1 rounded-xl border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500"
@@ -404,7 +440,19 @@ export default function Admin({ onBack }) {
         )}
 
         {adminSubPage === "transfers" && (
-          <Card title="Transfers History" desc={`${transfersTotal} total transfers`}>
+          <Card
+            title="Transfers History"
+            desc={`${transfersTotal} total transfers`}
+            right={(
+              <button
+                type="button"
+                onClick={refreshTransfers}
+                className="rounded-lg border px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Refresh
+              </button>
+            )}
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -459,7 +507,19 @@ export default function Admin({ onBack }) {
         )}
 
         {adminSubPage === "notifications" && (
-          <Card title="Notifications" desc={`${notificationsTotal} total notifications`}>
+          <Card
+            title="Notifications"
+            desc={`${notificationsTotal} total notifications`}
+            right={(
+              <button
+                type="button"
+                onClick={refreshNotifications}
+                className="rounded-lg border px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Refresh
+              </button>
+            )}
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

@@ -5,6 +5,7 @@ export default function Login({ onOk, onGoRegister, onGoAdmin }) {
   const [phone, setPhone] = useState("");
   const [password, setP] = useState("");
   const [err, setErr] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async () => {
     setErr("");
@@ -41,13 +42,23 @@ export default function Login({ onOk, onGoRegister, onGoAdmin }) {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
-          <input
-            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setP(e.target.value)}
-          />
+          <div className="relative">
+            <input
+              className="w-full rounded-xl border px-4 py-3 pr-16 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setP(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 flex gap-3">
