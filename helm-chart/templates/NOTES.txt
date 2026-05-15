@@ -1,0 +1,13 @@
+Banking installed. Structure: each service is a subchart in charts/<name>/ with its own Chart.yaml and values.yaml.
+
+Release namespace: {{ .Release.Namespace }}
+Recommended: helm install banking . -n banking --create-namespace
+
+Subcharts: postgres, redis, kong, auth-service, account-service, transfer-service, notification-service, frontend.
+Override from parent values (key matching the subchart folder name), or edit values directly in each charts/<service>/values.yaml.
+
+Ingress host: {{ .Values.ingress.host | default "banking.local" }}
+
+Upgrade: helm upgrade banking . -n banking
+Disable a service: helm upgrade banking . -n banking --set postgres.enabled=false
+

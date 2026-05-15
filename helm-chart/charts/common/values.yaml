@@ -1,0 +1,101 @@
+# Cấu hình dùng chung — global, namespace, secret, ingress
+global:
+  namespace: banking
+  secretName: banking-db-secret
+  corsOrigins: "http://localhost:3000"
+  imagePullSecrets:
+    dockerhub: dockerhub-registry
+    gitlab: gitlab-registry
+
+namespace:
+  enabled: true
+
+secret:
+  enabled: true
+  postgresUser: banking
+  postgresPassword: bankingpass
+  postgresDb: banking
+  databaseUrl: "postgresql://banking:bankingpass@postgres:5432/banking"
+  redisUrl: "redis://redis:6379/0"
+  # Phase 5: Postgres HA, Redis HA ở namespace riêng
+  #databaseUrl: "postgresql://banking:bankingpass@postgres-postgresql-primary.postgres.svc.cluster.local:5432/banking"
+  #redisUrl: "sentinel://:Mbfs%402025@redis.redis.svc.cluster.local:26379/0/mymaster"
+
+## Phase 4 v2 - DB migration hook (runs as Helm pre-install/pre-upgrade Job)
+dbMigration:
+  enabled: false
+  image: "postgres:15-alpine" # contains psql
+  hookWeight: "-10"
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# External Postgres support (DB outside the cluster).
+# Password is still read from the existing Secret key POSTGRES_PASSWORD.
+externalPostgres:
+  enabled: false
+  host: "db.example.local"
+  port: "5432"
+  db: "banking"
+  user: "banking"
+
+## Smoke-test Job hook (post-install/post-upgrade)
+smokeTest:
+  enabled: false
+  image: "curlimages/curl:8.11.0"
+  hookWeight: "10"
+  backoffLimit: 1
+  activeDeadlineSeconds: 120
+  authUser: "smoke-user"
+  authPassword: "smoke-pass"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+ingress:
+  enabled: true
+  className: haproxy
+  host: banking.local
+  name: banking-ingress
+  # Phase 5: Kong ở ns kong → dùng ExternalName Service trong ns banking
+  paths:
+    - path: /
+      pathType: Prefix
+      serviceName: frontend
+      servicePort: 80
+    - path: /api
+      pathType: Prefix
+      serviceName: kong
+      servicePort: 8000
+    - path: /ws
+      pathType: Prefix
+      serviceName: kong
+      servicePort: 8000
+
+# ExternalName Service trỏ tới Kong proxy ở ns kong (Dành cho Phase 5+)
+kongExternalService:
+  enabled: false
+  name: kong-proxy-ext
+  externalName: kong-kong-proxy.kong.svc.cluster.local
+  port: 8000
+
+# KEDA Autoscaling (Prometheus triggers)
+keda:
+  enabled: true
+  minReplicaCount: 2
+  maxReplicaCount: 5
+  pollingInterval: 10
+  cooldownPeriod: 30
+  scaleDownStabilizationWindowSeconds: 30
+  rateWindow: 1m
+  prometheusServerAddress: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"

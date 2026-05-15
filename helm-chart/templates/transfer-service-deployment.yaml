@@ -1,0 +1,102 @@
+{{- $svc := index .Values "transfer-service" }}
+{{- if $svc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "banking.transfer-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "banking.transfer-service.fullname" . }}
+    {{- include "banking.transfer-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.keda.enabled }}
+  replicas: {{ $svc.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "banking.transfer-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "banking.transfer-service.fullname" . }}
+        {{- include "banking.transfer-service.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with $svc.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $svc.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml $svc.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: transfer-service
+          image: "{{ $svc.image.repository }}:{{ $svc.image.tag }}"
+          imagePullPolicy: {{ $svc.image.pullPolicy }}
+          {{- with $svc.securityContext.container }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ $svc.service.port }}
+              name: {{ $svc.service.portName }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $svc.secretRef.name }}
+                  key: {{ $svc.secretRef.keys.databaseUrl }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $svc.secretRef.name }}
+                  key: {{ $svc.secretRef.keys.redisUrl }}
+            - name: CORS_ORIGINS
+              value: {{ $svc.corsOrigins | quote }}
+            {{- range $k, $v := $svc.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if $svc.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ $svc.readinessProbe.path }}
+              port: {{ $svc.readinessProbe.port }}
+            initialDelaySeconds: {{ $svc.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $svc.readinessProbe.periodSeconds }}
+            {{- if $svc.readinessProbe.timeoutSeconds }}
+            timeoutSeconds: {{ $svc.readinessProbe.timeoutSeconds }}
+            {{- end }}
+          {{- end }}
+{{- end }}
+---
+{{- if .Values.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "banking.transfer-service.fullname" . }}-scaler
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "banking.transfer-service.fullname" . }}
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ .Values.keda.scaleDownStabilizationWindowSeconds }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.keda.prometheusServerAddress }}
+        query: sum(rate(http_requests_total{job="{{ include "banking.transfer-service.fullname" . }}",endpoint!="/health",endpoint!="/metrics"}[{{ .Values.keda.rateWindow }}]))
+        threshold: "5"
+        activationThreshold: "1"
+{{- end }}
+
+

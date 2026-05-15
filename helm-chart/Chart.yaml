@@ -1,0 +1,14 @@
+apiVersion: v2
+name: banking
+description: Banking - Helm bootstrap chart. Deploy namespace, infra, gateway, services, frontend and ingress from a single chart.
+type: application
+version: 0.1.0
+appVersion: "1"
+keywords:
+  - banking
+  - microservices
+  - kong
+  - postgres
+  - redis
+maintainers: []
+kubeVersion: ">=1.24"

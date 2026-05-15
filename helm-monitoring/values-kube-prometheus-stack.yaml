@@ -1,0 +1,125 @@
+# Kube Prometheus Stack — Prometheus + Grafana (+ Alertmanager, operator)
+# Helm chart: prometheus-community/kube-prometheus-stack
+# Chỉnh namespace, additionalScrapeConfigs (banking), Grafana datasources (Loki, Tempo).
+
+namespaceOverride: monitoring
+
+# Prometheus: thêm scrape config cho banking services (KEDA dùng job name)
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: haproxy
+    hosts:
+      - prometheus.banking.local
+  prometheusSpec:
+    # Cho phép Tempo metrics-generator remote_write vào Prometheus
+    enableRemoteWriteReceiver: true
+    additionalScrapeConfigs:
+      - job_name: auth-service
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["auth-service.banking.svc.cluster.local:8001"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: auth-service
+      - job_name: account-service
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["account-service.banking.svc.cluster.local:8002"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: account-service
+      - job_name: transfer-service
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["transfer-service.banking.svc.cluster.local:8003"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: transfer-service
+      - job_name: notification-service
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["notification-service.banking.svc.cluster.local:8004"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: notification-service
+      # Phase 8: api-producer nhận toàn bộ HTTP API (RabbitMQ → consumers)
+      # - job_name: api-producer
+      #   metrics_path: /metrics
+      #   static_configs:
+      #     - targets: ["api-producer.banking.svc.cluster.local:8080"]
+      #   relabel_configs:
+      #     - source_labels: [__address__]
+      #       target_label: instance
+      #       replacement: api-producer
+      - job_name: kong
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["kong.banking.svc.cluster.local:8001"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: kong
+      - job_name: redis
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["redis-exporter.monitoring.svc.cluster.local:9121"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: redis
+      - job_name: postgres
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["postgres-exporter.monitoring.svc.cluster.local:9187"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: postgres
+
+# Grafana: datasources Loki + Tempo (sửa URL nếu release name khác)
+grafana:
+  adminPassword: admin
+  # Persistence: PVC để lưu password admin, dashboards, datasources, users
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: "standard" # Sử dụng default StorageClass
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+    # annotations: {}  # Thêm annotations nếu cần
+  initChownData:
+    enabled: false
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+    fsGroup: 0
+    runAsNonRoot: false
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: monitoring
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+    - name: Tempo
+      type: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      access: proxy
+      isDefault: false
+
+  ingress:
+    enabled: true
+    ingressClassName: haproxy
+    hosts:
+      - grafana.banking.local

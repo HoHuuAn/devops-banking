@@ -1,0 +1,45 @@
+notification-service:
+  fullnameOverride: notification-service
+  enabled: true
+  image:
+    repository: hohuuan2003/devops-banking-notification-service
+    tag: v2
+    pullPolicy: Always
+  imagePullSecrets: []
+  replicas: 1
+  service:
+    port: 8004
+    portName: http
+  secretRef:
+    name: banking-db-secret
+    keys:
+      databaseUrl: DATABASE_URL
+      redisUrl: REDIS_URL
+  corsOrigins: "http://localhost:3000"
+  # OpenTelemetry tracing → gửi traces về otel-collector → Tempo
+  extraEnv:
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://opentelemetry-collector.monitoring.svc.cluster.local:4317"
+  readinessProbe:
+    enabled: true
+    path: /health
+    port: 8004
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "600m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+
+

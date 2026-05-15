@@ -1,0 +1,50 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.ingress.name | default "banking-ingress" }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "banking.labels" . | nindent 4 }}
+  {{- if eq .Values.ingress.className "haproxy" }}
+  annotations:
+    haproxy.org/backend-protocol: "http"
+    haproxy.org/forwardfor: "true"
+    # WebSocket /ws — giữ kết nối lâu (haproxy-ingress: timeout-tunnel)
+    haproxy.org/timeout-tunnel: "1h"
+    # Load test 500+ CCU — tăng max connections tới Kong backend (mặc định có thể thấp)
+    haproxy.org/maxconn-server: "1000"
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+        {{- range .Values.ingress.paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ .serviceName }}
+                port:
+                  number: {{ .servicePort }}
+        {{- end }}
+{{- end }}
+---
+{{- if and .Values.kongExternalService .Values.kongExternalService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.kongExternalService.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "banking.labels" . | nindent 4 }}
+spec:
+  type: ExternalName
+  externalName: {{ .Values.kongExternalService.externalName }}
+  ports:
+    - port: {{ .Values.kongExternalService.port }}
+      protocol: TCP
+{{- end }}
+

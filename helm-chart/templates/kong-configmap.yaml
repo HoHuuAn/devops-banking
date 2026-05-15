@@ -1,0 +1,77 @@
+{{- if .Values.kong.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "banking.kong.configMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "banking.kong.fullname" . }}
+    {{- include "banking.kong.labels" . | nindent 4 }}
+data:
+  {{ .Values.kong.configFileName }}: |
+    _format_version: "3.0"
+    _transform: true
+
+    services:
+    {{- range .Values.kong.backends }}
+      - name: {{ .name }}
+        url: {{ .url | quote }}
+        routes:
+        {{- range .routes }}
+          - name: {{ .name }}
+            paths:
+            {{- range .paths }}
+              - {{ . | quote }}
+            {{- end }}
+            strip_path: {{ if kindIs "invalid" .strip_path }}true{{ else }}{{ .strip_path }}{{ end }}
+            {{- if .protocols }}
+            protocols:
+            {{- range .protocols }}
+              - {{ . }}
+            {{- end }}
+            {{- end }}
+        {{- end }}
+        plugins:
+          - name: cors
+            config:
+              origins:
+                {{- $origins := $.Values.kong.corsOrigins }}
+                {{- if kindIs "string" $origins }}
+                - {{ $origins | quote }}
+                {{- else }}
+                {{- range $origins }}
+                - {{ . | quote }}
+                {{- end }}
+                {{- end }}
+              credentials: {{ $.Values.kong.corsCredentials }}
+              methods:
+              {{- range $.Values.kong.corsMethods }}
+                - {{ . }}
+              {{- end }}
+              headers:
+              {{- range $.Values.kong.corsHeaders }}
+                - {{ . }}
+              {{- end }}
+          {{- if $.Values.kong.extraPlugins }}
+          {{- range $.Values.kong.extraPlugins }}
+          - name: {{ .name }}
+            {{- if .config }}
+            config:
+              {{- toYaml .config | nindent 14 }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+    {{- end }}
+
+    {{- if .Values.kong.globalPlugins }}
+    plugins:
+    {{- range .Values.kong.globalPlugins }}
+      - name: {{ .name }}
+        {{- if .config }}
+        config:
+          {{- toYaml .config | nindent 10 }}
+        {{- end }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+
