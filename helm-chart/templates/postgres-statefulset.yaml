@@ -15,6 +15,9 @@ metadata:
 spec:
   serviceName: {{ include "banking.postgres.fullname" . }}
   replicas: {{ .Values.postgres.replicas }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
   selector:
     matchLabels:
       {{- include "banking.postgres.selectorLabels" . | nindent 6 }}
