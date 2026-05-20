@@ -1,13 +1,16 @@
-{{- if .Values.postgres.enabled }}
+{{- $postgres := .Values.postgres | default dict -}}
+{{- if $postgres.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "banking.postgres.fullname" . }}
   namespace: {{ .Release.Namespace }}
-  {{- if and .Values.postgres.hook.preInstall .Values.postgres.hook.preUpgrade }}
+  {{- with $postgres.hook }}
+  {{- if and .preInstall .preUpgrade }}
   annotations:
     helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: {{ .Values.postgres.hook.weight | quote }}
+    helm.sh/hook-weight: {{ .weight | quote }}
+  {{- end }}
   {{- end }}
   labels:
     app: {{ include "banking.postgres.fullname" . }}

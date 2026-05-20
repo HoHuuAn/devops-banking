@@ -1,9 +1,9 @@
-# Grafana Tempo — tracing backend nhẹ, tích hợp tốt với Grafana
+# Grafana Tempo — tracing backend nhẹ, integrate well with Grafana
 # Chart: grafana/tempo
-# Nhận OTLP trực tiếp hoặc qua OTEL Collector
+# receive OTLP directly or via OTEL Collector
 
 tempo:
-  # OTLP receiver — app/OTel Collector gửi traces về đây
+  # OTLP receiver — app/OTel Collector send traces
   receivers:
     otlp:
       protocols:
@@ -11,10 +11,10 @@ tempo:
           endpoint: 0.0.0.0:4317
         http:
           endpoint: 0.0.0.0:4318
-  # Giữ trace trong 24h (có thể tăng)
+  # Keep trace in 24h
   retention: 24h
   # Metrics-generator (Span rate / Service graph).
-  # Với chart grafana/tempo, values đúng là `tempo.metricsGenerator.*` (sẽ render ra `metrics_generator.*` trong config).
+  # With chart grafana/tempo, values are `tempo.metricsGenerator.*` (render `metrics_generator.*` in config).
   metricsGenerator:
     enabled: true
     remoteWriteUrl: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write

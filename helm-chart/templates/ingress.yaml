@@ -31,20 +31,4 @@ spec:
                   number: {{ .servicePort }}
         {{- end }}
 {{- end }}
----
-{{- if and .Values.kongExternalService .Values.kongExternalService.enabled }}
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ .Values.kongExternalService.name }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "banking.labels" . | nindent 4 }}
-spec:
-  type: ExternalName
-  externalName: {{ .Values.kongExternalService.externalName }}
-  ports:
-    - port: {{ .Values.kongExternalService.port }}
-      protocol: TCP
-{{- end }}
 

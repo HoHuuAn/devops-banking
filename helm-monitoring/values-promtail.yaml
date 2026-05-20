@@ -15,5 +15,3 @@ config:
 # DaemonSet chạy trên mọi node
 daemonset:
   enabled: true
-
-# Nếu Loki đặt namespace/release khác, sửa URL cho đúng (vd. kubectl get svc -n monitoring)

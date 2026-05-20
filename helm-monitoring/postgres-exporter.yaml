@@ -1,6 +1,6 @@
-# PostgreSQL Exporter — Prometheus metrics cho Postgres (namespace banking)
-# Dùng secret banking-db-secret (cùng với app). Apply: kubectl apply -f postgres-exporter.yaml
-# Prometheus scrape target: postgres-exporter.banking.svc.cluster.local:9187
+# PostgreSQL Exporter — Prometheus metrics for Postgres HA (namespace postgres)
+# Apply: kubectl apply -f postgres-exporter.yaml -n postgres
+# Prometheus scrape target: postgres-exporter.postgres.svc.cluster.local:9187
 ---
 apiVersion: apps/v1
 kind: Deployment

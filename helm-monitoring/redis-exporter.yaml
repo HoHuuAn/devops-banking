@@ -1,6 +1,6 @@
-# Redis Exporter — Prometheus metrics cho Redis (namespace banking)
-# Apply sau khi đã có Redis: kubectl apply -f redis-exporter.yaml
-# Prometheus scrape target: redis-exporter.banking.svc.cluster.local:9121
+# Redis Exporter — Prometheus metrics for Redis HA (namespace redis)
+# Apply: kubectl apply -f redis-exporter.yaml -n redis
+# Prometheus scrape target: redis-exporter.redis.svc.cluster.local:9121
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,10 +21,11 @@ spec:
     spec:
       containers:
         - name: redis-exporter
-          # Dùng Docker Hub thay quay.io (quay.io có thể unauthorized/rate-limit)
+          # Use Docker Hub instead of quay.io (quay.io may be rate-limited)
           image: oliver006/redis_exporter:v1.80.1
           args:
-            - --redis.addr=redis.banking.svc.cluster.local:6379
+            - --redis.addr=redis://redis-master.redis.svc.cluster.local:6379
+            - --redis.password=banking-admin
           ports:
             - containerPort: 9121
               name: metrics

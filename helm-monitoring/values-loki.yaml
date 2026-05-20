@@ -1,10 +1,10 @@
 # Loki — monolithic single replica (Grafana Loki Helm chart)
 # Chart: grafana/loki
-# Chỉnh persistence, MinIO, hoặc object storage khác nếu cần.
+# Adjust persistence, MinIO, or other object storage if needed.
 
 loki:
-  # Grafana datasource (no-auth) sẽ lỗi 401 "no org id" nếu Loki bật multi-tenancy.
-  # Với lab/dev, tắt auth để dùng đơn giản.
+  # Grafana datasource (no-auth) will error 401 "no org id" if Loki multi-tenancy is enabled.
+  # For lab/dev, disable auth for simplicity.
   auth_enabled: false
   commonConfig:
     replication_factor: 1
@@ -12,7 +12,7 @@ loki:
     configs:
       - from: "2024-04-01"
         store: tsdb
-        object_store: filesystem # Dùng filesystem thay vì S3 cho local deployment
+        object_store: filesystem # Use filesystem instead of S3 for local deployment
         schema: v13
         index:
           prefix: loki_index_
@@ -24,22 +24,22 @@ loki:
   volume_enabled: true
   ruler:
     enable_api: true
-  # MinIO disabled - dùng filesystem storage với PVC
+  # MinIO disabled - use filesystem storage with PVC
   minio:
     enabled: false
-  # Storage config cho filesystem
+  # Storage config for filesystem
   storage:
     type: filesystem
     filesystem:
-      # Loki config expects `chunks_directory` / `rules_directory` (không phải `directory`)
-      # IMPORTANT: phải trỏ vào path được mount bởi PVC (chart thường mount vào /var/loki)
+      # Loki config expects `chunks_directory` / `rules_directory` (not `directory`)
+      # IMPORTANT: must point to path mounted by PVC (chart usually mounts at /var/loki)
       chunks_directory: /var/loki/chunks
       rules_directory: /var/loki/rules
 
 deploymentMode: SingleBinary
 
-# Scheduling: cluster của bạn có taint `ingress=only` và `control-plane`,
-# đồng thời các node worker đang thiếu RAM. Cho phép Loki pods schedule vào các node này.
+# Scheduling: cluster has taint `ingress=only` and `control-plane`,
+# and worker nodes might lack RAM. Allow Loki pods to schedule on these nodes.
 tolerations:
   - key: "ingress"
     operator: "Equal"
@@ -50,8 +50,19 @@ tolerations:
     effect: "NoSchedule"
 
 singleBinary:
+  initContainers:
+    - name: volume-permissions
+      image: busybox:1.36
+      command:
+        ["sh", "-c", "chown -R 10001:10001 /var/loki && chmod -R 777 /var/loki"]
+      volumeMounts:
+        - name: storage
+          mountPath: /var/loki
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
   replicas: 1
-  # Giảm resource để tránh Insufficient memory (tăng dần nếu cần)
+  # Reduce resource limits to avoid Insufficient memory (increase if needed)
   resources:
     requests:
       cpu: 100m
@@ -62,16 +73,16 @@ singleBinary:
   persistence:
     enabled: true
     size: 10Gi
-    # IMPORTANT: chart grafana/loki thường dùng key `storageClass` (không phải `storageClassName`)
-    # Nếu cluster có default StorageClass thì có thể để trống.
+    # IMPORTANT: grafana/loki chart usually uses `storageClass` key (not `storageClassName`)
+    # If cluster has default StorageClass, this can be empty.
     storageClass: standard
     storageClassName: standard
     accessModes:
       - ReadWriteOnce
     mountPath: /var/loki
 
-# Cache pods (memcached) thường là nguyên nhân Pending vì RAM.
-# Các key dưới đây là phổ biến của chart grafana/loki; nếu chart của bạn không dùng thì sẽ bị ignore.
+# Cache pods (memcached) are often Pending due to RAM.
+# These keys are common in grafana/loki chart; if your chart doesn't use them, they are ignored.
 memcached:
   tolerations:
     - key: "ingress"
@@ -89,8 +100,8 @@ memcached:
       cpu: 200m
       memory: 256Mi
 
-# Tắt cache để giảm pod/RAM và tránh lỗi DNS SRV khi chunks-cache Pending.
-# (Đặt cả 2 kiểu key để tương thích nhiều phiên bản chart)
+# Disable cache to reduce pods/RAM and avoid DNS SRV errors when chunks-cache is Pending.
+# (Set both key formats for multi-version compatibility)
 chunksCache:
   enabled: false
 resultsCache:
@@ -100,7 +111,7 @@ memcachedChunks:
 memcachedResults:
   enabled: false
 
-# Các deployment mode khác = 0
+# Other deployment modes = 0
 backend:
   replicas: 0
 read:

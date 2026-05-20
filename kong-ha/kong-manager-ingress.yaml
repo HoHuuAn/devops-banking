@@ -1,0 +1,44 @@
+# Ingress for Kong Manager + Admin API (same host to let Kong Manager call Admin API via path)
+#
+# Kong Manager (browser) calls Admin API at kong-manager.local/admin-api
+# Ingress route /admin-api -> kong-kong-admin (ClusterIP) - does not expose separate Admin API
+#
+# Apply: kubectl apply -f kong-manager-ingress.yaml -n kong
+# Access: http://kong-manager.local
+#
+# Need to set KONG_ADMIN_GUI_API_URL in values-kong-ha.yaml:
+#   env:
+#     admin_gui_api_url: "http://kong-manager.local/admin-api"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kong-manager
+  namespace: kong
+  labels:
+    app.kubernetes.io/name: kong
+    app.kubernetes.io/component: manager
+  annotations:
+    # Strip /admin-api prefix when forwarding to Admin API (Admin API expects /services, /routes...)
+    haproxy.org/path-rewrite: "/admin-api/(.*) /\\1"
+spec:
+  ingressClassName: haproxy
+  rules:
+    - host: kong-manager.local
+      http:
+        paths:
+          # Admin API — longer path to match first
+          - path: /admin-api
+            pathType: Prefix
+            backend:
+              service:
+                name: kong-kong-admin
+                port:
+                  number: 8001
+          # Kong Manager UI
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: kong-kong-manager
+                port:
+                  number: 8002

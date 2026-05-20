@@ -1,0 +1,79 @@
+# Kong HA with Postgres (chart kong/kong)
+# Run: helm upgrade -i kong kong/kong -n kong -f values-kong-ha.yaml
+# Condition: Postgres HA is running, Kong DB + user are created (kong-db-init-job)
+
+# Disable Ingress Controller - use traditional Kong (Admin API + Proxy)
+ingressController:
+  enabled: false
+
+# Disable Postgres subchart - use existing Postgres HA
+postgresql:
+  enabled: false
+
+# Kong env - connect to Postgres HA
+env:
+  database: "postgres"
+  pg_host: "postgres-postgresql-primary.postgres.svc.cluster.local"  
+  pg_port: "5432"
+  pg_database: "kong"
+  pg_user: "kong"
+  pg_password: "kongpass"
+  pg_ssl: "off"
+  proxy_access_log: "/dev/stdout"
+  admin_access_log: "/dev/stdout"
+  proxy_error_log: "/dev/stderr"
+  admin_error_log: "/dev/stderr"
+  admin_listen: "0.0.0.0:8001"
+  proxy_listen: "0.0.0.0:8000"
+  nginx_worker_processes: "2"
+  # Kong Manager calls Admin API via /admin-api path (Ingress proxy to ClusterIP)
+  # Change host if using a different domain
+  admin_gui_api_url: "http://kong-manager.local/admin-api"
+
+# HA: 2 replicas
+replicaCount: 2
+
+# Admin API - enable to import config (Konga/decK need internal connection)
+admin:
+  enabled: true
+  type: ClusterIP
+  http:
+    enabled: true
+    servicePort: 8001
+    containerPort: 8001
+  tls:
+    enabled: false
+  # Ingress disabled - use kong-manager-ingress.yaml to point to Manager
+  ingress:
+    enabled: false
+
+# Proxy - ClusterIP (Ingress banking points to here)
+proxy:
+  enabled: true
+  type: ClusterIP
+  http:
+    enabled: true
+    servicePort: 8000
+    containerPort: 8000
+  tls:
+    enabled: false
+
+# Image
+image:
+  repository: kong
+  tag: "3.4"
+  pullPolicy: IfNotPresent
+
+# Don't use dbless config
+dblessConfig:
+  configMap: ""
+  config: ""
+
+# Resources
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"

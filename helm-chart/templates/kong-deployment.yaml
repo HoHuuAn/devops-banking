@@ -1,4 +1,5 @@
-{{- if .Values.kong.enabled }}
+{{- $kong := .Values.kong | default dict -}}
+{{- if $kong.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
