@@ -10,22 +10,24 @@ from prometheus_client import Counter, Histogram, generate_latest, CollectorRegi
 _metrics_registry: CollectorRegistry | None = None
 _request_count: Counter | None = None
 _request_latency: Histogram | None = None
+_service_name: str | None = None
 
 
 def setup_metrics(service_name: str) -> None:
     """Initialize Prometheus metrics for this service."""
-    global _metrics_registry, _request_count, _request_latency
+    global _metrics_registry, _request_count, _request_latency, _service_name
     _metrics_registry = CollectorRegistry()
+    _service_name = service_name
     _request_count = Counter(
         "http_requests_total",
         "Total HTTP requests",
-        ["method", "endpoint", "status"],
+        ["service", "method", "endpoint", "status"],
         registry=_metrics_registry,
     )
     _request_latency = Histogram(
         "http_request_duration_seconds",
         "HTTP request latency",
-        ["method", "endpoint"],
+        ["service", "method", "endpoint"],
         registry=_metrics_registry,
     )
 
@@ -92,8 +94,14 @@ def instrument_fastapi(app, service_name: str) -> None:
             c, h = get_request_counter(), get_request_latency()
             if c and h:
                 endpoint = request.url.path or "/"
-                c.labels(method=request.method, endpoint=endpoint, status=response.status_code).inc()
-                h.labels(method=request.method, endpoint=endpoint).observe(duration)
+                service = _service_name or "unknown"
+                c.labels(
+                    service=service,
+                    method=request.method,
+                    endpoint=endpoint,
+                    status=response.status_code,
+                ).inc()
+                h.labels(service=service, method=request.method, endpoint=endpoint).observe(duration)
             return response
 
     app.add_middleware(PrometheusMiddleware)
