@@ -101,7 +101,7 @@ async def handle_admin_stats(payload: dict, headers: dict) -> dict:
 
 
 async def handle_admin_users(payload: dict, headers: dict) -> dict:
-    if not _verify_admin(headers, payload): 
+    if not _verify_admin(headers, payload):
         return {"status": 403, "body": {"detail": "Forbidden: invalid admin secret"}}
     page = int(payload.get("page", 1))
     size = int(payload.get("size", 20))
