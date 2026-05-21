@@ -35,7 +35,7 @@ python load_test.py --scenario transfer --users 50 --rps 30 --duration 180 --bas
 **3. Chaos / Full Cluster Scale-Up:**
 Hit all endpoints concurrently to trigger scaling across `auth`, `account`, and `transfer` services.
 ```bash
-python load_test.py --scenario all --rps 100 --duration 180 --base-url http://banking.local
+python load_test.py --scenario all --users 100 --rps 100 --duration 180 --workers 100 --base-url http://banking.local
 ```
 
 ## How to Verify Scaling

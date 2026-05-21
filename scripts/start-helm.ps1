@@ -213,21 +213,23 @@ kubectl label namespace banking app.kubernetes.io/managed-by=Helm --overwrite
 kubectl annotate namespace banking meta.helm.sh/release-name=banking --overwrite
 kubectl annotate namespace banking meta.helm.sh/release-namespace=banking --overwrite
 
-# Ensure DB secret exists (use defaults from charts/common/values.yaml)
-if (kubectl get secret banking-db-secret -n banking --ignore-not-found) {
-  Write-Host "  Adopting existing banking-db-secret into Helm release"
-} else {
-  Write-Host "  Creating banking-db-secret in namespace 'banking'"
-  kubectl create secret generic banking-db-secret `
-    --from-literal=postgresUser=banking `
-    --from-literal=postgresPassword=bankingpass `
-    --from-literal=postgresDb=banking `
-    -n banking --dry-run=client -o yaml | kubectl apply -f -
-}
-
-kubectl label secret banking-db-secret app.kubernetes.io/managed-by=Helm --overwrite -n banking
-kubectl annotate secret banking-db-secret meta.helm.sh/release-name=banking --overwrite -n banking
-kubectl annotate secret banking-db-secret meta.helm.sh/release-namespace=banking --overwrite -n banking
+# - helm-chart/templates/secret.yaml
+# - helm-chart/charts/common/values.yaml (secret.*)
+# Keep block below commented as fallback only.
+# if (kubectl get secret banking-db-secret -n banking --ignore-not-found) {
+#   Write-Host "  Adopting existing banking-db-secret into Helm release"
+# } else {
+#   Write-Host "  Creating banking-db-secret in namespace 'banking'"
+#   kubectl create secret generic banking-db-secret `
+#     --from-literal=postgresUser=banking `
+#     --from-literal=postgresPassword=bankingpass `
+#     --from-literal=postgresDb=banking `
+#     -n banking --dry-run=client -o yaml | kubectl apply -f -
+# }
+#
+# kubectl label secret banking-db-secret app.kubernetes.io/managed-by=Helm --overwrite -n banking
+# kubectl annotate secret banking-db-secret meta.helm.sh/release-name=banking --overwrite -n banking
+# kubectl annotate secret banking-db-secret meta.helm.sh/release-namespace=banking --overwrite -n banking
 
 helm upgrade --install banking ./helm-chart `
   --namespace banking `

@@ -38,5 +38,3 @@ Secret `banking-db-secret` requires `REDIS_URL`:
 ```
 redis://redis.redis.svc.cluster.local:6379/0
 ```
-
-See `APP-CUTOVER.md` for full cutover instructions.

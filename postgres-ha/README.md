@@ -44,8 +44,8 @@ kubectl -n postgres get pods -l app.kubernetes.io/name=postgresql -w
 
 ### 3.1. Identify old DB and new DB addresses
 
-- **Old DB (Phase 2)**: Usually in ns `banking`, Service `postgres`, port 5432. Pod: `postgres-0` (StatefulSet).
-- **New DB (Phase 5)**: ns `postgres`, Service `postgres-postgresql-primary.postgres.svc.cluster.local` (Bitnami), port 5432.
+- **Old DB**: Usually in ns `banking`, Service `postgres`, port 5432. Pod: `postgres-0` (StatefulSet).
+- **New DB**: ns `postgres`, Service `postgres-postgresql-primary.postgres.svc.cluster.local` (Bitnami), port 5432.
 
 ### 3.2. Method 1: Manual dump and restore (kubectl exec + port-forward)
 
@@ -133,14 +133,6 @@ kubectl -n banking rollout restart deployment auth-service account-service trans
 ```
 
 3. Disable old Postgres in banking-demo chart: set `postgres.enabled: false` in values.
-
----
-
-## Step 5: Test and cutover
-
-1. Login, transfer money, create notification – confirm app works with new DB.
-2. When stable: delete or scale down old Postgres in ns `banking` (if it still exists).
-3. (Optional) Run Phase 4 v2 migration (phone, account_number) if not run yet – Phase 4 DB migration Job can point to the new DB via `externalPostgres` or env.
 
 ---
 
