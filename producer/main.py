@@ -3,9 +3,8 @@ API Producer
 Receives HTTP from Kong, publishes to RabbitMQ, waits for response via Redis.
 """
 import os
-import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import aio_pika

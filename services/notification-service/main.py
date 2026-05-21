@@ -7,9 +7,8 @@ import os
 import asyncio
 import json
 from contextlib import asynccontextmanager, nullcontext
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from sqlalchemy import select
 from redis.asyncio import Redis
 
@@ -32,7 +31,6 @@ redis: Redis | None = None
 
 async def handle_notifications(payload: dict, headers: dict) -> dict:
     """GET /notifications — list user notifications."""
-    from fastapi import HTTPException
     try:
         user_id = await get_user_id_from_session(redis, headers.get("x-session") or headers.get("X-Session"))
     except Exception:
@@ -46,7 +44,6 @@ async def handle_notifications(payload: dict, headers: dict) -> dict:
 
 
 async def process_message(message):
-    from aio_pika import IncomingMessage
     async with message.process():
         body = {}
         try:
@@ -107,7 +104,6 @@ app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in CORS_ORIGIN
 @app.websocket("/ws")
 async def ws(websocket: WebSocket):
     """WebSocket — real-time notifications (bypasses queue)."""
-    from fastapi import HTTPException
     session = websocket.query_params.get("session")
     if not session:
         await websocket.close(code=1008)
@@ -177,7 +173,6 @@ async def health():
 
 async def _get_notifications(x_session: str | None) -> list:
     """Lấy danh sách notifications theo session."""
-    from fastapi import HTTPException
     try:
         user_id = await get_user_id_from_session(redis, x_session)
     except Exception:
@@ -200,6 +195,7 @@ async def _get_notifications(x_session: str | None) -> list:
 async def get_notifications(x_session: str | None = Header(None, alias="X-Session")):
     """GET notifications — hỗ trợ cả Kong route trực tiếp và qua api-producer."""
     return await _get_notifications(x_session)
+
 
 
 

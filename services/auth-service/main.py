@@ -9,7 +9,6 @@ import json
 import secrets
 from contextlib import asynccontextmanager, nullcontext
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 from sqlalchemy import select
 from redis.asyncio import Redis
 import aio_pika

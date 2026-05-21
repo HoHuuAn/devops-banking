@@ -94,7 +94,7 @@ async def handle_transfer(payload: dict, headers: dict, trace: dict) -> dict:
             queue="transfer.requests",
         )
         return {"status": 200, "body": {"ok": True, "from": sender.username, "to": receiver.username, "to_account_number": receiver.account_number, "amount": amount}}
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise
     finally:

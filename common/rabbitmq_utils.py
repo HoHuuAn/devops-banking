@@ -6,7 +6,7 @@ import os
 import time
 import uuid
 import asyncio
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import aio_pika
 from aio_pika import Message, DeliveryMode
@@ -57,7 +57,7 @@ async def publish_and_wait(
     redis_key = f"response:{correlation_id}"
 
     # Ensure queue exists
-    queue = await channel.declare_queue(queue_name, durable=True)
+    await channel.declare_queue(queue_name, durable=True)
     await channel.default_exchange.publish(
         Message(
             body=json.dumps(body).encode(),

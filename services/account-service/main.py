@@ -7,7 +7,6 @@ import os
 import asyncio
 import json
 from contextlib import asynccontextmanager, nullcontext
-from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from redis.asyncio import Redis
 from aio_pika import IncomingMessage

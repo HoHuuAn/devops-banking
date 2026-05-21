@@ -7,6 +7,10 @@ import traceback
 import uuid
 from typing import Any, Dict
 
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+
 
 def mask_amount(amount: int | float) -> str:
     """Hash amount for logs — không ghi số tiền thật để bảo mật."""
@@ -21,10 +25,6 @@ def mask_account_number(account: str) -> str:
     if len(s) <= 6:
         return "*" * min(4, len(s)) if s else "******"
     return f"{s[:4]}****{s[-2:]}"
-
-from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 
 
 def should_log_request_flow() -> bool:
