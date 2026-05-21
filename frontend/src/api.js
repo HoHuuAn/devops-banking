@@ -30,6 +30,11 @@ async function req(path, { method = "GET", body, headers = {} } = {}) {
   return data;
 }
 
+function adminHeader(secret) {
+  const normalized = String(secret || "").trim();
+  return { "X-Admin-Secret": normalized };
+}
+
 export const api = {
   register: (phone, username, password) =>
     req("/api/auth/register", {
@@ -57,26 +62,26 @@ export const api = {
   notifications: () => req("/api/notifications/notifications"),
 
   adminStats: (secret) =>
-    req("/api/account/admin/stats", { headers: { "X-Admin-Secret": secret } }),
+    req("/api/account/admin/stats", { headers: adminHeader(secret) }),
 
   adminUsers: (secret, page = 1, size = 20, search = "") =>
     req(`/api/account/admin/users?page=${page}&size=${size}&search=${encodeURIComponent(search)}`, {
-      headers: { "X-Admin-Secret": secret },
+      headers: adminHeader(secret),
     }),
 
   adminUserDetail: (secret, userId) =>
     req(`/api/account/admin/users/${userId}`, {
-      headers: { "X-Admin-Secret": secret },
+      headers: adminHeader(secret),
     }),
 
   adminTransfers: (secret, page = 1, size = 20) =>
     req(`/api/account/admin/transfers?page=${page}&size=${size}`, {
-      headers: { "X-Admin-Secret": secret },
+      headers: adminHeader(secret),
     }),
 
   adminNotifications: (secret, page = 1, size = 20, userId = "") =>
     req(`/api/account/admin/notifications?page=${page}&size=${size}${userId ? `&user_id=${userId}` : ""}`, {
-      headers: { "X-Admin-Secret": secret },
+      headers: adminHeader(secret),
     }),
 
   // Health checks (no auth) — returns { status, database, redis, ... } or { error }

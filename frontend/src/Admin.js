@@ -13,10 +13,15 @@ function AdminLogin({ onAuth, onBack }) {
   const submit = async (e) => {
     e.preventDefault();
     setErr("");
+    const normalized = secret.trim();
+    if (!normalized) {
+      setErr("Admin secret is required");
+      return;
+    }
     try {
-      await api.adminStats(secret);
-      localStorage.setItem(SECRET_KEY, secret);
-      onAuth(secret);
+      await api.adminStats(normalized);
+      localStorage.setItem(SECRET_KEY, normalized);
+      onAuth(normalized);
     } catch {
       setErr("Invalid admin secret");
     }

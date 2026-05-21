@@ -23,14 +23,28 @@ Base.metadata.create_all(bind=engine)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
-ADMIN_SECRET = os.getenv("ADMIN_SECRET", "banking-admin-2025")
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "banking-admin")
 
 logger = get_json_logger("account-service")
 redis: Redis | None = None
 
 
-def _verify_admin(headers: dict) -> bool:
-    return (headers.get("x-admin-secret") or headers.get("X-Admin-Secret")) == ADMIN_SECRET
+def _extract_admin_secret(headers: dict, payload: dict) -> str:
+    """Read admin secret from header first, then payload/query fallback."""
+    secret = (
+        headers.get("x-admin-secret")
+        or headers.get("X-Admin-Secret")
+        or payload.get("admin_secret")
+        or payload.get("adminSecret")
+        or ""
+    )
+    return str(secret).strip()
+
+
+def _verify_admin(headers: dict, payload: dict) -> bool:
+    expected = (ADMIN_SECRET or "").strip()
+    provided = _extract_admin_secret(headers, payload)
+    return bool(expected) and provided == expected
 
 
 async def handle_me(payload: dict, headers: dict) -> dict:
@@ -72,8 +86,8 @@ async def handle_lookup(payload: dict, headers: dict) -> dict:
 
 
 async def handle_admin_stats(payload: dict, headers: dict) -> dict:
-    if not _verify_admin(headers):
-        return {"status": 403, "body": {"detail": "Forbidden"}}
+    if not _verify_admin(headers, payload):
+        return {"status": 403, "body": {"detail": "Forbidden: invalid admin secret"}}
     db = SessionLocal()
     try:
         total_users = db.execute(select(func.count(User.id))).scalar()
@@ -87,8 +101,8 @@ async def handle_admin_stats(payload: dict, headers: dict) -> dict:
 
 
 async def handle_admin_users(payload: dict, headers: dict) -> dict:
-    if not _verify_admin(headers):
-        return {"status": 403, "body": {"detail": "Forbidden"}}
+    if not _verify_admin(headers, payload): 
+        return {"status": 403, "body": {"detail": "Forbidden: invalid admin secret"}}
     page = int(payload.get("page", 1))
     size = int(payload.get("size", 20))
     search = (payload.get("search") or "").strip()
@@ -106,8 +120,8 @@ async def handle_admin_users(payload: dict, headers: dict) -> dict:
 
 
 async def handle_admin_transfers(payload: dict, headers: dict) -> dict:
-    if not _verify_admin(headers):
-        return {"status": 403, "body": {"detail": "Forbidden"}}
+    if not _verify_admin(headers, payload):
+        return {"status": 403, "body": {"detail": "Forbidden: invalid admin secret"}}
     page = int(payload.get("page", 1))
     size = int(payload.get("size", 20))
     db = SessionLocal()
@@ -123,8 +137,8 @@ async def handle_admin_transfers(payload: dict, headers: dict) -> dict:
 
 
 async def handle_admin_notifications(payload: dict, headers: dict) -> dict:
-    if not _verify_admin(headers):
-        return {"status": 403, "body": {"detail": "Forbidden"}}
+    if not _verify_admin(headers, payload):
+        return {"status": 403, "body": {"detail": "Forbidden: invalid admin secret"}}
     page = int(payload.get("page", 1))
     size = int(payload.get("size", 20))
     user_id = payload.get("user_id")
@@ -143,9 +157,9 @@ async def handle_admin_notifications(payload: dict, headers: dict) -> dict:
         db.close()
 
 
-async def handle_admin_user_detail(user_id: int, headers: dict) -> dict:
-    if not _verify_admin(headers):
-        return {"status": 403, "body": {"detail": "Forbidden"}}
+async def handle_admin_user_detail(user_id: int, headers: dict, payload: dict) -> dict:
+    if not _verify_admin(headers, payload):
+        return {"status": 403, "body": {"detail": "Forbidden: invalid admin secret"}}
     db = SessionLocal()
     try:
         u = db.get(User, user_id)
@@ -185,7 +199,7 @@ async def process_message(message: IncomingMessage):
                 elif action == "admin/users" or "admin/users" in path:
                     if "/admin/users/" in path and path.split("/admin/users/")[-1].isdigit():
                         uid = int(path.split("/admin/users/")[-1].split("/")[0])
-                        result = await handle_admin_user_detail(uid, headers)
+                        result = await handle_admin_user_detail(uid, headers, payload)
                     else:
                         result = await handle_admin_users(payload, headers)
                 elif "admin/transfers" in (path or ""):
