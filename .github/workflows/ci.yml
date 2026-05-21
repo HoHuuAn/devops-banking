@@ -2,8 +2,8 @@ name: CI
 
 # ============================================================
 # Triggers: push to main/dev
-# Builds:  auth-service, account-service, transfer-service,
-#         notification-service, frontend
+# Builds:  api-producer, auth-service, account-service,
+#          transfer-service, notification-service, frontend
 # Registry: Docker Hub (hohuuan2003/devops-banking)
 # ============================================================
 
@@ -11,16 +11,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: docker.io
   IMAGE_REPO: ${{ format('{0}/devops-banking', secrets.DOCKER_USERNAME) }}
-  RELEASE_TAG: v2
+  RELEASE_TAG: v3
 
 on:
   push:
-    branches: [main, dev, version2]
+    branches: [main, dev, version2, version3]
     paths:
       # Only rebuild when source code changes
       - 'services/**'
       - 'frontend/**'
       - 'common/**'
+      - 'producer/**'
       - 'backend/**'
       - 'docker-compose.yml'
       - 'docker-compose.deploy.yml'
@@ -42,6 +43,7 @@ on:
           - transfer-service
           - notification-service
           - frontend
+          - api-producer
 
 
 jobs:
@@ -70,6 +72,8 @@ jobs:
               - 'services/transfer-service/**'
             notification-service:
               - 'services/notification-service/**'
+            api-producer:
+              - 'producer/**'
             frontend:
               - 'frontend/**'
             common:
@@ -85,7 +89,7 @@ jobs:
           # Manual trigger → use selected services
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.services }}" == "all" ]; then
-              echo "list=auth-service,account-service,transfer-service,notification-service,frontend" >> $GITHUB_OUTPUT
+              echo "list=api-producer,auth-service,account-service,transfer-service,notification-service,frontend" >> $GITHUB_OUTPUT
             else
               echo "list=${{ github.event.inputs.services }}" >> $GITHUB_OUTPUT
             fi
@@ -99,10 +103,11 @@ jobs:
           [ "${{ steps.filter.outputs.account-service }}" == "true" ]      && CHANGED="$CHANGED,account-service"
           [ "${{ steps.filter.outputs.transfer-service }}" == "true" ]   && CHANGED="$CHANGED,transfer-service"
           [ "${{ steps.filter.outputs.notification-service }}" == "true" ] && CHANGED="$CHANGED,notification-service"
+          [ "${{ steps.filter.outputs.api-producer }}" == "true" ]         && CHANGED="$CHANGED,api-producer"
           [ "${{ steps.filter.outputs.frontend }}" == "true" ]            && CHANGED="$CHANGED,frontend"
-          [ "${{ steps.filter.outputs.common }}" == "true" ]              && CHANGED="$CHANGED,auth-service,account-service,transfer-service,notification-service"
-          [ "${{ steps.filter.outputs.backend }}" == "true" ]              && CHANGED="$CHANGED,auth-service,account-service,transfer-service,notification-service"
-          [ "${{ steps.filter.outputs.workflow }}" == "true" ]            && CHANGED="$CHANGED,auth-service,account-service,transfer-service,notification-service,frontend"
+          [ "${{ steps.filter.outputs.common }}" == "true" ]              && CHANGED="$CHANGED,api-producer,auth-service,account-service,transfer-service,notification-service"
+          [ "${{ steps.filter.outputs.backend }}" == "true" ]             && CHANGED="$CHANGED,api-producer,auth-service,account-service,transfer-service,notification-service"
+          [ "${{ steps.filter.outputs.workflow }}" == "true" ]            && CHANGED="$CHANGED,api-producer,auth-service,account-service,transfer-service,notification-service,frontend"
 
           CHANGED=$(echo "$CHANGED" | sed 's/^,//' | tr ',' '\n' | sort -u | grep -v '^$' | tr '\n' ',' | sed 's/,$//')
 
@@ -134,8 +139,8 @@ jobs:
 
       - name: Lint Python code
         run: |
-          ruff check common/ services/ --select E,F,W --ignore E501
-          ruff format --check common/ services/ || true
+          ruff check common/ services/ producer/ --select E,F,W --ignore E501
+          ruff format --check common/ services/ producer/ || true
 
       - name: Lint Dockerfiles
         run: |
@@ -146,6 +151,7 @@ jobs:
               grep -q ":latest" "$df" && echo "WARN: Using :latest in $df" || true
             fi
           done
+          [ -f "producer/Dockerfile" ] && grep -q ":latest" "producer/Dockerfile" && echo "WARN: Using :latest in producer/Dockerfile" || true
 
   # ============================================================
   # Stage 3: Test
@@ -169,7 +175,7 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m compileall common/ services/ -q
+          python -m compileall common/ services/ producer/ -q
           echo "Syntax check passed"
 
       - name: Smoke test — import all modules
@@ -178,6 +184,7 @@ jobs:
           (cd services/account-service && python -c "import sys; sys.path.insert(0, '../common'); print('account-service OK')")
           (cd services/transfer-service && python -c "import sys; sys.path.insert(0, '../common'); print('transfer-service OK')")
           (cd services/notification-service && python -c "import sys; sys.path.insert(0, '../common'); print('notification-service OK')")
+          (cd producer && python -c "import sys; sys.path.insert(0, '../common'); print('api-producer OK')")
 
       - name: End-to-end test (auth, transfer, notifications)
         if: needs.detect-changes.outputs.any-change == 'true'
@@ -294,6 +301,9 @@ jobs:
           - name: frontend
             context: ./frontend
             dockerfile: frontend/Dockerfile
+          - name: api-producer
+            context: .
+            dockerfile: producer/Dockerfile
     steps:
       - name: Check if service is in build list
         id: should-build
@@ -379,6 +389,7 @@ jobs:
           - transfer-service
           - notification-service
           - frontend
+          - api-producer
     steps:
       - name: Check if service was built
         id: should-push
@@ -492,6 +503,7 @@ jobs:
           - transfer-service
           - notification-service
           - frontend
+          - api-producer
     steps:
       - name: Check if service was built
         id: should-scan

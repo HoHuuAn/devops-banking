@@ -6,15 +6,11 @@ from common.db import Base
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # v2: đăng nhập bằng số điện thoại + mỗi user có số tài khoản (random, unique)
     phone: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     account_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)
-
-    # hiển thị UI
     username: Mapped[str] = mapped_column(String(50), index=True)
-
     password_hash: Mapped[str] = mapped_column(String(255))
-    balance: Mapped[int] = mapped_column(Integer, default=100000)  # demo: 100k
+    balance: Mapped[int] = mapped_column(Integer, default=100000)
 
 class Transfer(Base):
     __tablename__ = "transfers"
