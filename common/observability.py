@@ -23,9 +23,10 @@ def init_tracing(service_name: str) -> None:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
-        resource = Resource.create({SERVICE_NAME: service_name})
+        resolved_service_name = os.getenv("OTEL_SERVICE_NAME", service_name).strip() or service_name
+        resource = Resource.create({SERVICE_NAME: resolved_service_name})
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
         trace.set_tracer_provider(provider)
 
         # Redis instrumentation — trace mỗi lệnh Redis (GET, SET, ...) để xem latency
