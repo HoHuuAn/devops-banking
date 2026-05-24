@@ -4,7 +4,7 @@ frontend:
   enabled: true
   image:
     repository: hohuuan2003/devops-banking-frontend
-    tag: v2
+    tag: v3
     pullPolicy: Always
   imagePullSecrets: []
   replicas: 1

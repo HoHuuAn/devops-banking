@@ -1,5 +1,14 @@
-# Job to import declarative config into Kong DB
-# Run AFTER Kong is deployed and migrations are done
+# Import declarative Kong config into the Kong database.
+# Run this after Kong is deployed (namespace: kong) and
+# api-producer + consumers are running (namespace: banking).
+#
+# Usage:
+#   kubectl apply -f kong-ha/kong-import-job.yaml
+#   kubectl rollout restart deployment -n kong -l app.kubernetes.io/name=kong
+#
+# Notes:
+# - Restart Kong after the job completes so new routes are loaded from DB.
+# - If old routes already exist, remove overlapping routes first via Admin API.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -11,51 +20,35 @@ data:
     _format_version: "3.0"
     _transform: true
     services:
-      - name: auth-service
-        url: "http://auth-service.banking.svc.cluster.local:8001"
+      # Route all /api/* traffic to api-producer (RabbitMQ-backed processing).
+      - name: api-producer
+        url: "http://api-producer.banking.svc.cluster.local:8080"
+        connect_timeout: 10000   # 10s connect timeout
+        read_timeout: 60000      # 60s read timeout for upstream response
+        write_timeout: 60000     # 60s write timeout
         routes:
-          - name: auth-route
-            paths: ["/api/auth"]
-            strip_path: true
+          - name: api-route
+            paths: ["/api"]
+            strip_path: false
         plugins:
           - name: cors
             config:
-              origins: ["http://localhost:3000", "https://npd-banking.local", "http://npd-banking.local"]
-              credentials: true
-              methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-              headers: ["Accept", "Accept-Version", "Content-Length", "Content-MD5", "Content-Type", "Date", "X-Session"]
-      - name: account-service
-        url: "http://account-service.banking.svc.cluster.local:8002"
-        routes:
-          - name: account-route
-            paths: ["/api/account"]
-            strip_path: true
-        plugins:
-          - name: cors
-            config:
-              origins: ["http://localhost:3000", "https://npd-banking.local", "http://npd-banking.local"]
+              origins: ["http://localhost:3000", "https://banking.co", "http://banking.co"]
               credentials: true
               methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
               headers: ["Accept", "Accept-Version", "Content-Length", "Content-MD5", "Content-Type", "Date", "X-Session", "X-Admin-Secret"]
-      - name: transfer-service
-        url: "http://transfer-service.banking.svc.cluster.local:8003"
-        routes:
-          - name: transfer-route
-            paths: ["/api/transfer"]
-            strip_path: true
-        plugins:
-          - name: cors
+          - name: rate-limiting
             config:
-              origins: ["http://localhost:3000", "https://npd-banking.local", "http://npd-banking.local"]
-              credentials: true
-              methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-              headers: ["Accept", "Accept-Version", "Content-Length", "Content-MD5", "Content-Type", "Date", "X-Session"]
+              second: 2000     # 2k req/s per IP (for high concurrency load tests)
+              minute: 50000    # 50k req/min
+              hour: 200000     # 200k req/hour
+              policy: local    # per Kong pod (2 replicas ~= 2x total limit)
+              fault_tolerant: true
+              hide_client_headers: false  # return X-RateLimit-* headers
+      # Route /ws to notification-service for websocket traffic.
       - name: notification-service
         url: "http://notification-service.banking.svc.cluster.local:8004"
         routes:
-          - name: notification-route
-            paths: ["/api/notifications"]
-            strip_path: true
           - name: notification-ws-route
             paths: ["/ws"]
             strip_path: false
@@ -63,7 +56,7 @@ data:
         plugins:
           - name: cors
             config:
-              origins: ["http://localhost:3000", "https://npd-banking.local", "http://npd-banking.local"]
+              origins: ["http://localhost:3000", "https://banking.co", "http://banking.co"]
               credentials: true
               methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
               headers: ["Accept", "Accept-Version", "Content-Length", "Content-MD5", "Content-Type", "Date", "X-Session"]
@@ -103,7 +96,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              kong config db_import /kong/kong.yml && echo "Import done"
+              kong config db_import /kong/kong.yml && echo "Kong config import done"
           volumeMounts:
             - name: config
               mountPath: /kong

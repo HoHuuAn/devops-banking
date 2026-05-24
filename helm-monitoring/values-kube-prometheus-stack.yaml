@@ -1,4 +1,4 @@
-# Kube Prometheus Stack — Prometheus + Grafana (+ Alertmanager, operator)
+# Kube Prometheus Stack - Prometheus + Grafana (+ Alertmanager, operator)
 # Helm chart: prometheus-community/kube-prometheus-stack
 # Adjust namespace, additionalScrapeConfigs (banking), Grafana datasources (Loki, Tempo).
 
@@ -12,7 +12,7 @@ kubeEtcd:
 kubeScheduler:
   enabled: false
 
-# Prometheus: thêm scrape config cho banking services (KEDA dùng job name)
+# Prometheus: add scrape configs for banking services (KEDA relies on job names)
 prometheus:
   ingress:
     enabled: true
@@ -55,15 +55,15 @@ prometheus:
           - source_labels: [__address__]
             target_label: instance
             replacement: notification-service
-      # - job_name: api-producer
-      #   metrics_path: /metrics
-      #   static_configs:
-      #     - targets: ["api-producer.banking.svc.cluster.local:8080"]
-      #   relabel_configs:
-      #     - source_labels: [__address__]
-      #       target_label: instance
-      #       replacement: api-producer
-      # Kong Admin API metrics — Kong runs in 'kong' namespace.
+      - job_name: api-producer
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["api-producer.banking.svc.cluster.local:8080"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: api-producer
+      # Kong Admin API metrics - Kong runs in 'kong' namespace.
       - job_name: kong
         metrics_path: /metrics
         static_configs:
@@ -72,6 +72,15 @@ prometheus:
           - source_labels: [__address__]
             target_label: instance
             replacement: kong
+      # RabbitMQ Prometheus plugin metrics (namespace rabbit, port 15692)
+      - job_name: rabbitmq
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["rabbitmq.rabbit.svc.cluster.local:15692"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: rabbitmq
       # Redis exporter in redis namespace 
       - job_name: redis
         metrics_path: /metrics
@@ -90,7 +99,7 @@ prometheus:
       #     - source_labels: [__address__]
       #       target_label: instance
       #       replacement: postgres
-      # PostgreSQL HA primary (Phase 5 — Bitnami metrics sidecar, namespace postgres)
+      # PostgreSQL HA primary (Bitnami metrics sidecar, namespace postgres)
       - job_name: postgres
         metrics_path: /metrics
         static_configs:
@@ -112,7 +121,7 @@ prometheus:
 # Grafana: datasources Loki + Tempo
 grafana:
   adminPassword: admin
-  # Persistence: PVC để lưu password admin, dashboards, datasources, users
+  # Persistence: PVC stores admin password, dashboards, datasources, and users
   persistence:
     enabled: true
     type: pvc
@@ -120,7 +129,7 @@ grafana:
     accessModes:
       - ReadWriteOnce
     size: 10Gi
-    # annotations: {}  # Thêm annotations nếu cần
+    # annotations: {}  # Add annotations if needed
   initChownData:
     enabled: false
   securityContext:

@@ -1,4 +1,4 @@
-# Redis Exporter — Prometheus metrics for Redis HA (namespace redis)
+# Redis Exporter - Prometheus metrics for Redis HA (namespace redis)
 # Apply: kubectl apply -f redis-exporter.yaml -n redis
 # Prometheus scrape target: redis-exporter.redis.svc.cluster.local:9121
 ---

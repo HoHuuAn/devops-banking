@@ -21,6 +21,14 @@ loki:
     enabled: true
   limits_config:
     allow_structured_metadata: true
+    # Prefer explicit app/service labels for Logs Drilldown service discovery.
+    discover_service_name:
+      - service_name
+      - service
+      - app_kubernetes_io_name
+      - app
+      - job
+      - container
   volume_enabled: true
   ruler:
     enable_api: true

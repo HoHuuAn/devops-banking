@@ -1,4 +1,4 @@
-# ConfigMap — Kong API Gateway Dashboard
+# ConfigMap - Kong API Gateway Dashboard
 # Grafana sidecar automatically loads dashboards with label grafana_dashboard="1"
 apiVersion: v1
 kind: ConfigMap

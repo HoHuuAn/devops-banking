@@ -55,7 +55,17 @@ spec:
                   key: {{ $svc.secretRef.keys.redisUrl }}
 
             - name: CORS_ORIGINS
-              value: {{ $svc.corsOrigins | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $svc.secretRef.name }}
+                  key: CORS_ORIGINS
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $svc.secretRef.name }}
+                  key: RABBITMQ_URL
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
             {{- range $k, $v := $svc.extraEnv }}
             - name: {{ $k }}
               value: {{ $v | quote }}
@@ -92,12 +102,16 @@ spec:
         scaleDown:
           stabilizationWindowSeconds: {{ .Values.keda.scaleDownStabilizationWindowSeconds }}
   triggers:
-    - type: prometheus
+    - type: rabbitmq
       metadata:
-        serverAddress: {{ .Values.keda.prometheusServerAddress }}
-        query: sum(rate(http_requests_total{job="{{ include "banking.auth-service.fullname" . }}",endpoint!="/health",endpoint!="/metrics"}[{{ .Values.keda.rateWindow }}]))
-        threshold: "5"
-        activationThreshold: "1"
+        hostFromEnv: RABBITMQ_URL
+        queueName: auth.requests
+        mode: {{ .Values.keda.rabbitmq.mode | quote }}
+        value: {{ .Values.keda.rabbitmq.value | quote }}
+        activationValue: {{ .Values.keda.rabbitmq.activationValue | quote }}
+        protocol: {{ .Values.keda.rabbitmq.protocol | quote }}
+        authMode: {{ .Values.keda.rabbitmq.authMode | quote }}
 {{- end }}
+
 
 

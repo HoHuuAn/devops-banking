@@ -1,9 +1,9 @@
-# Grafana Tempo — tracing backend nhẹ, integrate well with Grafana
+# Grafana Tempo - lightweight tracing backend with Grafana integration
 # Chart: grafana/tempo
-# receive OTLP directly or via OTEL Collector
+# Receives OTLP directly or via OpenTelemetry Collector
 
 tempo:
-  # OTLP receiver — app/OTel Collector send traces
+  # OTLP receiver - app services/OpenTelemetry Collector send traces
   receivers:
     otlp:
       protocols:
@@ -20,12 +20,12 @@ tempo:
     remoteWriteUrl: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
     storage:
       path: /var/tempo/generator
-      # remote_write: []  # optional: dùng remoteWriteUrl nếu không set
+      # remote_write: []  # Optional: use remoteWriteUrl if this is not set
     traces_storage:
       path: /var/tempo/generator-traces
 
-  # Storage: local (filesystem) — đủ cho dev/test
-  # Production nên dùng S3/GCS/MinIO
+  # Storage: local filesystem (suitable for dev/test)
+  # For production, use object storage such as S3/GCS/MinIO.
   storage:
     trace:
       backend: local
@@ -41,7 +41,7 @@ securityContext:
   fsGroup: 0
   runAsNonRoot: false
 
-# Persistence — bật để giữ traces khi pod restart
+# Persistence - enabled to keep traces across pod restarts
 persistence:
   enabled: true
   size: 5Gi

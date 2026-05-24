@@ -5,6 +5,7 @@ Set-Location $RepoRoot
 
 Write-Host "==> Uninstalling Helm releases"
 helm uninstall banking -n banking
+helm uninstall api-producer -n banking
 helm uninstall kong -n kong
 helm uninstall redis -n redis
 helm uninstall postgres -n postgres
@@ -15,8 +16,15 @@ helm uninstall opentelemetry-collector -n monitoring
 helm uninstall keda -n keda
 helm uninstall haproxy -n haproxy-controller
 
+Write-Host "==> Deleting additional workloads"
+kubectl delete secret rabbitmq-connection-secret -n banking --ignore-not-found=true
+kubectl delete job kong-config-import -n kong --ignore-not-found=true
+kubectl delete configmap kong-declarative-config -n kong --ignore-not-found=true
+kubectl delete -f ./rabbitmq/k8s-rabbitmq-standalone.yaml --ignore-not-found=true
+kubectl delete -f ./rabbitmq/rabbitmq-secret.yaml --ignore-not-found=true
+
 Write-Host "==> Deleting PVCs"
-foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
+foreach ($ns in @("banking", "rabbit", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
     Write-Host "Deleting PVCs in namespace: $ns"
     kubectl delete pvc --all -n $ns --ignore-not-found=true --wait=false
     $wait = 0
@@ -58,7 +66,7 @@ foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", 
 }
 
 Write-Host "==> Deleting KEDA ScaledObjects before namespace removal"
-foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
+foreach ($ns in @("banking", "rabbit", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
     Write-Host "Deleting ScaledObjects in namespace: $ns"
     try {
         $scaledObjects = kubectl get scaledobject -n $ns -o json 2>$null | ConvertFrom-Json
@@ -108,12 +116,12 @@ foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", 
 }
 
 Write-Host "==> Deleting namespaces"
-foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
+foreach ($ns in @("banking", "rabbit", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
     kubectl delete namespace $ns --ignore-not-found=true
 }
 
 Write-Host "==> Clearing stuck namespace finalizers"
-foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
+foreach ($ns in @("banking", "rabbit", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
     try {
         $phase = kubectl get namespace $ns -o jsonpath='{.status.phase}' 2>$null
         if ($phase -eq 'Terminating') {
@@ -128,7 +136,7 @@ foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", 
 Write-Host "==> Deleting PVs for target namespaces"
 try {
     $pv = kubectl get pv -o json | ConvertFrom-Json
-    $targetNamespaces = @("banking", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")
+    $targetNamespaces = @("banking", "rabbit", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")
     $names = $pv.items | Where-Object {
         ($_.spec.claimRef -and ($targetNamespaces -contains $_.spec.claimRef.namespace)) -or
         ($_.status.phase -eq "Released" -or $_.status.phase -eq "Failed")

@@ -3,7 +3,7 @@ transfer-service:
   enabled: true
   image:
     repository: hohuuan2003/devops-banking-transfer-service
-    tag: v2
+    tag: v3
     pullPolicy: Always
   imagePullSecrets: []
   replicas: 2
@@ -15,7 +15,6 @@ transfer-service:
     keys:
       databaseUrl: DATABASE_URL
       redisUrl: REDIS_URL
-  corsOrigins: "http://localhost:3000"
   # OpenTelemetry tracing → gửi traces về otel-collector → Tempo
   extraEnv:
     OTEL_EXPORTER_OTLP_ENDPOINT: "http://opentelemetry-collector.monitoring.svc.cluster.local:4317"

@@ -1,6 +1,5 @@
-# Promtail — log shipper gửi log pod tới Loki
+# Promtail - pod log shipper to Loki
 # Chart: grafana/promtail
-# Chỉnh config.clients (Loki URL) nếu release/namespace Loki khác.
 
 config:
   clients:
@@ -11,7 +10,23 @@ config:
       - multiline:
           firstline: '^\d{4}-\d{2}-\d{2}'
           max_wait_time: 3s
+    extraRelabelConfigs:
+      # Stable service label for Logs Drilldown.
+      # The chart already resolves app.kubernetes.io/name -> app -> controller/pod fallback into "app".
+      - action: replace
+        source_labels:
+          - app
+        regex: ^(.+)$
+        replacement: $1
+        target_label: service_name
+      # Mirror to a plain "service" label for Grafana UX.
+      - action: replace
+        source_labels:
+          - service_name
+        regex: ^(.+)$
+        replacement: $1
+        target_label: service
 
-# DaemonSet chạy trên mọi node
+# Run Promtail on all nodes
 daemonset:
   enabled: true

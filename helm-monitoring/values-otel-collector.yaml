@@ -1,19 +1,19 @@
-# OpenTelemetry Collector — nhận OTLP từ app, export traces sang Tempo + Jaeger
+# OpenTelemetry Collector - receives OTLP from services and exports traces to Tempo
 # Chart: open-telemetry/opentelemetry-collector
-# Chỉnh config.exporters.otlp/tempo endpoint nếu Tempo service khác.
+# Update config.exporters.otlp/tempo endpoint if Tempo service name changes
 
-# Service name = opentelemetry-collector (app trỏ tới opentelemetry-collector.monitoring...)
+# Service name = opentelemetry-collector (apps point to opentelemetry-collector.monitoring...)
 fullnameOverride: opentelemetry-collector
 namespaceOverride: monitoring
 mode: deployment
 replicaCount: 1
 
-# Chart mới yêu cầu set image.repository (bắt buộc)
+# New chart versions require image.repository to be set
 image:
   repository: otel/opentelemetry-collector-contrib
-  # tag: "0.102.0"  # optional: pin version nếu muốn
+  # tag: "0.102.0"  # Optional: pin image version if desired
 
-# Config: OTLP in → Tempo exporter (health_check bắt buộc cho probe)
+# Config: OTLP in -> Tempo exporter (health_check is required for probes)
 config:
   extensions:
     health_check:

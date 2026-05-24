@@ -1,4 +1,4 @@
-# PostgreSQL Exporter — Prometheus metrics for Postgres HA (namespace postgres)
+# PostgreSQL Exporter - Prometheus metrics for Postgres HA (namespace postgres)
 # Apply: kubectl apply -f postgres-exporter.yaml -n postgres
 # Prometheus scrape target: postgres-exporter.postgres.svc.cluster.local:9187
 ---

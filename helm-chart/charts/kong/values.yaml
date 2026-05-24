@@ -1,7 +1,6 @@
-# ArgoCD/Helm merge theo key kong
 kong:
   fullnameOverride: kong
-  enabled: true
+  enabled: true # False when using kong-ha
   image:
     repository: kong
     tag: "3.4"

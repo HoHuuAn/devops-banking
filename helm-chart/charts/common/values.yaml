@@ -3,6 +3,9 @@ global:
   namespace: banking
   secretName: banking-db-secret
   corsOrigins: "http://localhost:3000"
+  rabbitmqUrl: "amqp://banking:bankingpass@rabbitmq.rabbit.svc.cluster.local:5672/"
+  ADMIN_SECRET: "banking-admin"
+  adminSecret: "banking-admin"
   imagePullSecrets:
     dockerhub: dockerhub-registry
     gitlab: gitlab-registry
@@ -99,3 +102,9 @@ keda:
   scaleDownStabilizationWindowSeconds: 30
   rateWindow: 1m
   prometheusServerAddress: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+  rabbitmq:
+    mode: QueueLength
+    value: "10"
+    activationValue: "1"
+    protocol: auto
+    authMode: password
