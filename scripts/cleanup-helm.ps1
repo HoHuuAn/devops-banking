@@ -61,45 +61,57 @@ Write-Host "==> Deleting KEDA ScaledObjects before namespace removal"
 foreach ($ns in @("banking", "kong", "redis", "postgres", "monitoring", "keda", "haproxy-controller")) {
     Write-Host "Deleting ScaledObjects in namespace: $ns"
     try {
-        $scaledObjects = kubectl get scaledobject -n $ns -o json 2>$null | ConvertFrom-Json
-        if ($scaledObjects.items) {
-            foreach ($scaledObject in $scaledObjects.items) {
-                $scaledObjectName = $scaledObject.metadata.name
+        $scaledObjectNames = @(kubectl get scaledobject -n $ns -o name --request-timeout=10s 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not list ScaledObjects in namespace '$ns' (timeout or API error)."
+            continue
+        }
+
+        if ($scaledObjectNames) {
+            foreach ($scaledObjectRef in $scaledObjectNames) {
+                $scaledObjectName = $scaledObjectRef -replace '^scaledobject.keda.sh/', '' -replace '^scaledobject/', ''
                 Write-Host "  - Removing finalizers from ScaledObject: $scaledObjectName"
+
+                # Safe fallback for PowerShell JSON quoting: get object, clear finalizers, replace object.
                 try {
-                    kubectl patch scaledobject $scaledObjectName -n $ns --type=merge -p '{"metadata":{"finalizers":[]}}' 2>$null | Out-Null
+                    $soJson = kubectl get scaledobject $scaledObjectName -n $ns -o json --request-timeout=10s 2>$null
+                    if ($soJson) {
+                        $soObj = $soJson | ConvertFrom-Json
+                        $soObj.metadata.finalizers = @()
+                        $soObj | ConvertTo-Json -Depth 100 | kubectl replace -f - --request-timeout=10s 2>$null | Out-Null
+                    }
                 } catch {
-                    Write-Warning "Failed to patch finalizers for ScaledObject ${scaledObjectName}: $($_)"
+                    Write-Warning "Failed to clear finalizers for ScaledObject ${scaledObjectName}: $($_)"
                 }
-                try {
-                    kubectl delete scaledobject $scaledObjectName -n $ns --grace-period=0 --force --ignore-not-found=true 2>$null | Out-Null
-                } catch {
-                    Write-Warning "Failed to force-delete ScaledObject ${scaledObjectName}: $($_)"
-                }
+
+                kubectl delete scaledobject $scaledObjectName -n $ns --grace-period=0 --force --ignore-not-found=true --wait=false --request-timeout=10s 2>$null | Out-Null
             }
         }
 
         $wait = 0
         while ($wait -lt 60) {
-            $remainingScaledObjects = kubectl get scaledobject -n $ns --no-headers 2>$null | Select-String . -Quiet
+            $remainingScaledObjects = kubectl get scaledobject -n $ns -o name --request-timeout=10s 2>$null | Select-String . -Quiet
             if (-not $remainingScaledObjects) { break }
             Start-Sleep -Seconds 2
             $wait += 2
         }
 
         if ($remainingScaledObjects) {
-            Write-Warning "Some ScaledObjects in namespace '$ns' still exist after force-delete; patching and retrying once more."
-            $scaledObjects = kubectl get scaledobject -n $ns -o json 2>$null | ConvertFrom-Json
-            if ($scaledObjects.items) {
-                foreach ($scaledObject in $scaledObjects.items) {
-                    $scaledObjectName = $scaledObject.metadata.name
-                    try {
-                        kubectl patch scaledobject $scaledObjectName -n $ns --type=merge -p '{"metadata":{"finalizers":[]}}' 2>$null | Out-Null
-                        kubectl delete scaledobject $scaledObjectName -n $ns --grace-period=0 --force --ignore-not-found=true 2>$null | Out-Null
-                    } catch {
-                        Write-Warning "Second pass failed for ScaledObject ${scaledObjectName}: $($_)"
+            Write-Warning "Some ScaledObjects in namespace '$ns' still exist after first pass; retrying with forced finalizer removal."
+            $scaledObjectNames = @(kubectl get scaledobject -n $ns -o name --request-timeout=10s 2>$null)
+            foreach ($scaledObjectRef in $scaledObjectNames) {
+                $scaledObjectName = $scaledObjectRef -replace '^scaledobject.keda.sh/', '' -replace '^scaledobject/', ''
+                try {
+                    $soJson = kubectl get scaledobject $scaledObjectName -n $ns -o json --request-timeout=10s 2>$null
+                    if ($soJson) {
+                        $soObj = $soJson | ConvertFrom-Json
+                        $soObj.metadata.finalizers = @()
+                        $soObj | ConvertTo-Json -Depth 100 | kubectl replace -f - --request-timeout=10s 2>$null | Out-Null
                     }
+                } catch {
+                    Write-Warning "Second pass finalizer clear failed for ScaledObject ${scaledObjectName}: $($_)"
                 }
+                kubectl delete scaledobject $scaledObjectName -n $ns --grace-period=0 --force --ignore-not-found=true --wait=false --request-timeout=10s 2>$null | Out-Null
             }
         }
     } catch {
